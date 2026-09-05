@@ -125,7 +125,34 @@ flowchart TD
 
 ---
 
-### 5. 🛡️ Fail2ban Security Jails Reference
+### 5. 🛡️ Fail2ban Security Jails Reference & Telegram Format
+
+Fail2ban scans structured logs and automatically bans attackers while dispatching rich security notifications directly to Telegram:
+
+```text
+🚨 SECURITY ALERT (Fail2Ban)
+
+━━━━━━━━━━━━━━━━━━
+🖥 Server: vps-master-01
+📍 Service: fastapi-auth
+━━━━━━━━━━━━━━━━━━
+
+🚫 Action Taken: BANNED
+🌐 Source IP: 198.51.100.45
+🌍 Geo: Los Angeles, United States - AS13335 Cloudflare
+
+📊 Metrics:
+- Failed Attempts: 5
+- Banned Duration: 3600s
+
+⏱ Timestamp: 2026-09-06 02:40:00 UTC
+
+📄 Reason:
+Brute-force authentication attack detected on protected login routes (/api/auth/login). Triggered after 5 consecutive failed attempts.
+
+🔐 Status: IP has been blocked via iptables/nftables
+━━━━━━━━━━━━━━━━━━
+```
 
 | Jail Name | Filter Configuration | Trigger Condition | Default Ban Action |
 | :--- | :--- | :--- | :--- |
@@ -136,21 +163,35 @@ flowchart TD
 
 ---
 
-### 6. 🚨 Alertmanager Alert Rules Reference
+### 6. 🚨 Alertmanager Alert Rules Reference & Telegram Format
 
-| Alert Rule Name | Category | Trigger Expression | Severity |
-| :--- | :--- | :--- | :--- |
-| **`HostHighCpuLoad`** | Infrastructure | Host CPU utilization > 80% for 5m | 🔴 **CRITICAL** |
-| **`HostOutOfMemory`** | Infrastructure | Host Memory usage > 85% for 5m | 🔴 **CRITICAL** |
-| **`HostOutOfDiskSpace`** | Infrastructure | Root disk space usage > 90% for 5m | 🔴 **CRITICAL** |
-| **`ServiceInstanceDown`** | Availability | Any scrape target `up == 0` for 1m | 🔴 **CRITICAL** |
-| **`BlackboxProbeFailed`** | Availability | Uptime prober fails to get 2xx response | 🔴 **CRITICAL** |
-| **`ApiHigh5xxErrorRate`** | Application | HTTP 5xx errors > 5% of traffic over 5m | 🔴 **CRITICAL** |
-| **`HighLoginFailureRate`** | Security | Failed logins > 0.5/sec (30/min) over 5m | 🔴 **CRITICAL** |
-| **`SuddenTrafficDrop`** | Business | Traffic drops > 50% compared to 1h prior | 🔴 **CRITICAL** |
-| **`ApiHighP95Latency`** | Application | Endpoint 95th percentile latency > 500ms for 3m | 🟡 **WARNING** |
-| **`ApiDatabaseSlowQueries`** | Database | DB query 95th percentile latency > 200ms for 3m | 🟡 **WARNING** |
-| **`ApiAbuseRateLimitSpike`** | Security | 429 rate limit triggers > 1.0/sec for 2m | 🟡 **WARNING** |
+When an infrastructure or application performance threshold is breached, Alertmanager dispatches the exact route, metric value, server, and severity:
+
+```text
+🚨 SYSTEM ALERT (NextAura APM)
+
+━━━━━━━━━━━━━━━━━━
+🖥 Server: fastapi-service
+📍 Service: fastapi-app
+🎯 Endpoint / Route: /api/checkout
+━━━━━━━━━━━━━━━━━━
+
+🔥 Alert Name: ApiHighP95Latency
+⚡ Severity: 🔴 CRITICAL
+🏷 Category: application
+
+📊 Performance & Metrics:
+Endpoint /api/checkout 95th percentile latency is 0.854s (Threshold: > 0.500s)
+
+📄 Reason:
+Endpoint latency p95 > 500ms (/api/checkout)
+
+⏱ Timestamp: 2026-09-06 02:41:15 UTC
+📖 Runbook: https://docs.local/runbooks/api-5xx-errors
+━━━━━━━━━━━━━━━━━━
+🌐 Dashboard: Open Grafana Dashboards
+```
+
 
 ---
 

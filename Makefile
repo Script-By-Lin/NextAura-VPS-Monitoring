@@ -1,4 +1,4 @@
-.PHONY: help up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram
+.PHONY: help up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
 
 help:
 	@echo "VPS Monitoring & Security Platform Commands:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make scan        - Scan host for pre-existing services & port conflicts"
 	@echo "  make add-site    - Auto-generate Nginx proxy config for your custom service"
 	@echo "  make telegram    - 1-Step Telegram alert setup (Token only from @BotFather)"
+	@echo "  make scale-node  - Onboard a remote VPS worker node via SSH"
 	@echo "  make up          - Start the complete observability stack"
 	@echo "  make down        - Stop the observability stack"
 	@echo "  make restart     - Restart all containers"
@@ -25,8 +26,12 @@ add-site:
 telegram:
 	python3 scripts/telegram_setup.py
 
+scale-node:
+	python3 scripts/scale_node.py
+
 wizard:
 	python3 scripts/wizard.py
+
 
 
 

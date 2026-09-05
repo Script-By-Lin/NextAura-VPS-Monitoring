@@ -1,24 +1,31 @@
 {{ define "telegram.default.message" }}
 {{ if eq .Status "firing" }}
-🔥 <b>[ALERT FIRING - {{ .Alerts | len }}]</b>
+🚨 <b>SYSTEM ALERT (NextAura APM)</b>
 {{ else }}
-✅ <b>[ALERT RESOLVED]</b>
+✅ <b>ALERT RESOLVED (NextAura APM)</b>
 {{ end }}
 
+━━━━━━━━━━━━━━━━━━
 {{ range .Alerts }}
-<b>Alert:</b> <code>{{ .Labels.alertname }}</code>
-<b>Severity:</b> {{ if eq .Labels.severity "critical" }}🔴 CRITICAL{{ else if eq .Labels.severity "warning" }}🟡 WARNING{{ else }}🔵 INFO{{ end }}
-<b>Category:</b> <i>{{ .Labels.category }}</i>
-<b>Service:</b> <code>{{ if .Labels.service }}{{ .Labels.service }}{{ else }}{{ .Labels.job }}{{ end }}</code>
-<b>Instance:</b> <code>{{ .Labels.instance }}</code>
+🖥 <b>Server:</b> <code>{{ .Labels.instance }}</code>
+📍 <b>Service:</b> <code>{{ if .Labels.service }}{{ .Labels.service }}{{ else }}{{ .Labels.job }}{{ end }}</code>
+{{ if .Labels.endpoint }}🎯 <b>Endpoint / Route:</b> <code>{{ .Labels.endpoint }}</code>{{ end }}
+{{ if .Labels.table }}🗄 <b>DB Table:</b> <code>{{ .Labels.table }}</code>{{ end }}
+━━━━━━━━━━━━━━━━━━
 
-<b>Summary:</b> {{ .Annotations.summary }}
-<b>Description:</b> {{ .Annotations.description }}
-{{ if .Annotations.runbook_url }}
-📖 <a href="{{ .Annotations.runbook_url }}">Incident Runbook</a>
+🔥 <b>Alert Name:</b> <code>{{ .Labels.alertname }}</code>
+⚡ <b>Severity:</b> {{ if eq .Labels.severity "critical" }}🔴 CRITICAL{{ else if eq .Labels.severity "warning" }}🟡 WARNING{{ else }}🔵 INFO{{ end }}
+🏷 <b>Category:</b> <i>{{ .Labels.category }}</i>
+
+📊 <b>Performance & Metrics:</b>
+{{ .Annotations.description }}
+
+📄 <b>Reason:</b>
+<i>{{ .Annotations.summary }}</i>
+
+⏱ <b>Timestamp:</b> {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+{{ if .Annotations.runbook_url }}📖 <b>Runbook:</b> <a href="{{ .Annotations.runbook_url }}">Incident Guide</a>{{ end }}
+━━━━━━━━━━━━━━━━━━
 {{ end }}
-<b>Triggered At:</b> {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
------------------------------------
-{{ end }}
-🌐 <b>Observability Stack:</b> <a href="http://localhost:3000">Open Grafana</a>
+🌐 <b>Dashboard:</b> <a href="http://localhost:3000">Open Grafana Dashboards</a>
 {{ end }}
