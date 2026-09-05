@@ -1,0 +1,185 @@
+groups:
+  # ============================================================================
+  # 1. INFRASTRUCTURE & HOST ALERTS
+  # ============================================================================
+  - name: infrastructure_alerts
+    rules:
+      - alert: HostHighCpuLoad
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 5m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Host high CPU load (instance {{ $labels.instance }})"
+          description: "CPU load is > 80% for more than 5 minutes. Current value: {{ printf \"%.2f\" $value }}%"
+          runbook_url: "https://docs.local/runbooks/infra-high-cpu"
+
+      - alert: HostOutOfMemory
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100) > 85
+        for: 5m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Host memory exhaustion (instance {{ $labels.instance }})"
+          description: "Host memory usage is > 85%. Current value: {{ printf \"%.2f\" $value }}%"
+          runbook_url: "https://docs.local/runbooks/infra-oom"
+
+      - alert: HostOutOfDiskSpace
+        expr: ((node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_free_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} * 100) > 90
+        for: 5m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Host disk space nearly full (instance {{ $labels.instance }})"
+          description: "Root disk partition usage is > 90%. Current value: {{ printf \"%.2f\" $value }}%"
+          runbook_url: "https://docs.local/runbooks/infra-disk-full"
+
+      - alert: HostHighLoadAverage
+        expr: (node_load15 / count without (cpu, mode) (node_cpu_seconds_total{mode="system"})) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "Host 15m load average exceeds CPU core capacity"
+          description: "Load average per core is > 1.5 for 10m. Current ratio: {{ printf \"%.2f\" $value }}"
+
+      - alert: ServiceInstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Target instance is down (job {{ $labels.job }})"
+          description: "Scrape target {{ $labels.instance }} has been unreachable for 1 minute."
+
+  # ============================================================================
+  # 2. DOCKER CONTAINER ALERTS
+  # ============================================================================
+  - name: container_alerts
+    rules:
+      - alert: ContainerCrashLooping
+        expr: rate(container_last_seen{name=~".+"}[3m]) < 0.2
+        for: 2m
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Container is flapping or down: {{ $labels.name }}"
+          description: "Container {{ $labels.name }} has intermittent health check failures."
+
+      - alert: ContainerHighMemoryUsage
+        expr: (container_memory_working_set_bytes{name=~"vps-.*"} / container_spec_memory_limit_bytes{name=~"vps-.*"} * 100) > 85
+        for: 3m
+        labels:
+          severity: warning
+          category: containers
+        annotations:
+          summary: "Container {{ $labels.name }} memory > 85%"
+          description: "Container memory working set is above 85% limit."
+
+  # ============================================================================
+  # 3. FASTAPI APPLICATION & APM ALERTS
+  # ============================================================================
+  - name: application_apm_alerts
+    rules:
+      - alert: ApiHigh5xxErrorRate
+        expr: (sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100) > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: application
+        annotations:
+          summary: "FastAPI 5xx server error rate > 5%"
+          description: "HTTP 5xx error rate is {{ printf \"%.2f\" $value }}% over the last 5 minutes."
+          runbook_url: "https://docs.local/runbooks/api-5xx-errors"
+
+      - alert: ApiHigh4xxErrorRate
+        expr: (sum(rate(http_requests_total{status_code=~"4.."}[5m])) / sum(rate(http_requests_total[5m])) * 100) > 20
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "FastAPI 4xx client error rate > 20%"
+          description: "High client error rate detected ({{ printf \"%.2f\" $value }}%). Possible client misconfiguration or attack."
+
+      - alert: ApiHighP95Latency
+        expr: histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "Endpoint latency p95 > 500ms ({{ $labels.endpoint }})"
+          description: "Endpoint {{ $labels.endpoint }} 95th percentile latency is {{ printf \"%.3f\" $value }}s."
+
+      - alert: ApiDatabaseSlowQueries
+        expr: histogram_quantile(0.95, sum by (le, table) (rate(db_query_duration_seconds_bucket[5m]))) > 0.2
+        for: 3m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Slow database query detected on table {{ $labels.table }}"
+          description: "p95 DB query latency for table {{ $labels.table }} is {{ printf \"%.3f\" $value }}s."
+
+      - alert: BlackboxProbeFailed
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: synthetic
+        annotations:
+          summary: "Synthetic Uptime Probe Failed: {{ $labels.instance }}"
+          description: "Blackbox prober failed to verify 2xx response from {{ $labels.instance }}."
+
+  # ============================================================================
+  # 4. BUSINESS & SECURITY ANOMALIES
+  # ============================================================================
+  - name: business_security_alerts
+    rules:
+      - alert: SuddenTrafficDrop
+        expr: (sum(rate(http_requests_total[5m])) / sum(rate(http_requests_total[1h] offset 1h))) < 0.5 and sum(rate(http_requests_total[1h] offset 1h)) > 10
+        for: 5m
+        labels:
+          severity: critical
+          category: business
+        annotations:
+          summary: "Sudden traffic drop > 50% compared to last hour"
+          description: "Incoming API traffic experienced an unexpected precipitous drop."
+
+      - alert: HighLoginFailureRate
+        expr: sum(rate(business_login_attempts_total{status="failure"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Brute-force authentication attack detected"
+          description: "High rate of failed login attempts detected ({{ printf \"%.2f\" $value }} failures/sec)."
+          runbook_url: "https://docs.local/runbooks/security-auth-bruteforce"
+
+      - alert: ApiAbuseRateLimitSpike
+        expr: sum(rate(business_rate_limit_hits_total[5m])) > 1.0
+        for: 2m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "API rate limit exhaustion spike"
+          description: "Rate limit 429 triggers exceeded 1.0/sec over 5m."
+
+      - alert: SuspiciousTrafficBursts
+        expr: sum(rate(business_suspicious_requests_total[5m])) > 0.2
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Suspicious security threat patterns detected"
+          description: "Vulnerability scan, SQLi, or path traversal attempts detected."

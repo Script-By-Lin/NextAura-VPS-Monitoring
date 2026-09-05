@@ -1,0 +1,59 @@
+# ==============================================================================
+# Production Fail2ban Jail Configuration
+# ==============================================================================
+
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 172.28.0.0/16
+backend = auto
+action = iptables-multiport[name=%(__name__)s, port="%(port)s", protocol="tcp"]
+         telegram-notify[name=%(__name__)s]
+
+# ------------------------------------------------------------------------------
+# 1. SSH Protection
+# ------------------------------------------------------------------------------
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 24h
+
+# ------------------------------------------------------------------------------
+# 2. FastAPI Authentication Abuse Protection (Brute Force)
+# ------------------------------------------------------------------------------
+[fastapi-auth]
+enabled = true
+port = http,https,8000
+filter = fastapi-auth
+logpath = /var/log/fastapi/*.log
+maxretry = 5
+findtime = 10m
+bantime = 2h
+
+# ------------------------------------------------------------------------------
+# 3. Nginx Rate-Limit 429 Violators
+# ------------------------------------------------------------------------------
+[nginx-429]
+enabled = true
+port = http,https
+filter = nginx-429
+logpath = /var/log/nginx/access.log
+maxretry = 10
+findtime = 5m
+bantime = 1h
+
+# ------------------------------------------------------------------------------
+# 4. Vulnerability Scanners & Bad Bot Abuse
+# ------------------------------------------------------------------------------
+[api-abuse]
+enabled = true
+port = http,https
+filter = api-abuse
+logpath = /var/log/nginx/access.log
+maxretry = 3
+findtime = 10m
+bantime = 24h

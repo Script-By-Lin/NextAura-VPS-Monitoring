@@ -1,0 +1,41 @@
+# ==============================================================================
+# Git Ignore Configuration for VPS Monitoring Platform
+# ==============================================================================
+
+# Environment files & credentials
+.env
+*.env.local
+*.env.*.local
+
+# Logs and runtime artifacts
+logs/
+*.log
+/tmp/
+/tmp/*
+.system_generated/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Docker volume data mounts (if created locally)
+data/
+prometheus_data/
+grafana_data/
+loki_data/
+tempo_data/
+alertmanager_data/
+
+# OS and IDE artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

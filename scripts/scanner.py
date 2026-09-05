@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""
+Host Service & Port Discovery Scanner
+Scans host and Docker containers for pre-existing services (Nginx, Apache, Node.js,
+Python/FastAPI, Databases, Redis, existing monitoring stacks) and generates tailored
+adoption/proxy configurations to avoid port collisions and integrate existing workloads.
+"""
+
+import os
+import sys
+import subprocess
+import socket
+import re
+import urllib.request
+import json
+from typing import Dict, List, Optional
+
+CYAN = "\033[0;36m"
+GREEN = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED = "\033[0;31m"
+BOLD = "\033[1m"
+NC = "\033[0m"
+
+WELL_KNOWN_PORTS = {
+    80: ("HTTP Web Server / Reverse Proxy", ["Nginx", "Apache", "Caddy", "Traefik", "Lighttpd"]),
+    443: ("HTTPS Web Server / SSL Gateway", ["Nginx", "Apache", "Caddy", "Traefik"]),
+    3000: ("Web UI / Frontend / Grafana", ["Grafana", "Node.js/Next.js", "React/Vite", "Express", "Ruby on Rails"]),
+    5000: ("Python/Node Backend API", ["Flask", "Gunicorn", "FastAPI", "ASP.NET Core", "Docker Registry"]),
+    5173: ("Vite Frontend Dev Server", ["Vite", "Vue", "React", "Svelte"]),
+    5432: ("PostgreSQL Database", ["PostgreSQL Server"]),
+    6379: ("Redis In-Memory Store", ["Redis Server", "KeyDB"]),
+    8000: ("Python/FastAPI Backend API", ["FastAPI", "Uvicorn", "Django", "Gunicorn", "PHP Dev Server"]),
+    8080: ("Java/Node/cAdvisor Web Service", ["cAdvisor", "Spring Boot", "Tomcat", "Node.js", "Jenkins"]),
+    9090: ("Prometheus Engine / Cockpit", ["Prometheus TSDB", "Cockpit Web UI"]),
+    9093: ("Alertmanager Server", ["Prometheus Alertmanager"]),
+    9100: ("Node Exporter", ["Prometheus Node Exporter"]),
+    9115: ("Blackbox Exporter", ["Prometheus Blackbox Exporter"]),
+    3100: ("Loki Log Aggregator", ["Grafana Loki"]),
+    3200: ("Tempo Trace Store", ["Grafana Tempo"]),
+    3306: ("MySQL / MariaDB", ["MySQL Server", "MariaDB Server"]),
+    27017: ("MongoDB Database", ["MongoDB"]),
+}
+
+class ServiceInfo:
+    def __init__(self, port: int, proto: str, address: str, pid: Optional[int], process_name: str, cmdline: str):
+        self.port = port
+        self.proto = proto
+        self.address = address
+        self.pid = pid
+        self.process_name = process_name
+        self.cmdline = cmdline
+        self.category, self.candidates = WELL_KNOWN_PORTS.get(port, ("Custom Service", ["Unknown Service"]))
+        self.http_banner = ""
+        self.is_docker = False
+        self.container_name = ""
+
+def probe_http_banner(port: int) -> str:
+    """Sends a quick HTTP HEAD request to detect server signature (e.g. nginx/1.25)."""
+    try:
+        url = f"http://127.0.0.1:{port}/"
+        req = urllib.request.Request(url, headers={"User-Agent": "VPS-Monitoring-Discovery/1.0"})
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            server = resp.headers.get("Server", "")
+            title = ""
+            return f"HTTP {resp.status} (Server: {server})" if server else f"HTTP {resp.status}"
+    except urllib.error.HTTPError as e:
+        server = e.headers.get("Server", "")
+        return f"HTTP {e.code} (Server: {server})" if server else f"HTTP {e.code}"
+    except Exception:
+        return ""
+
+def scan_listening_ports() -> List[ServiceInfo]:
+    """Scans all TCP listening sockets on the host using `ss` or `/proc/net/tcp`."""
+    services = []
+    seen_ports = set()
+
+    # 1. Try ss -tulpn
+    try:
+        output = subprocess.check_output(["ss", "-tlpn"], stderr=subprocess.DEVNULL).decode("utf-8")
+        for line in output.strip().split("\n")[1:]:
+            parts = line.split()
+            if len(parts) >= 4:
+                local_addr = parts[3]
+                match = re.search(r":(\d+)$", local_addr)
+                if match:
+                    port = int(match.group(1))
+                    if port in seen_ports:
+                        continue
+                    seen_ports.add(port)
+
+                    process_info = parts[-1] if len(parts) > 5 else ""
+                    proc_match = re.search(r'users:\(\("([^"]+)",pid=(\d+)', process_info)
+                    proc_name = proc_match.group(1) if proc_match else "process"
+                    pid = int(proc_match.group(2)) if proc_match else None
+
+                    cmdline = ""
+                    if pid:
+                        try:
+                            with open(f"/proc/{pid}/cmdline", "r") as f:
+                                cmdline = f.read().replace("\x00", " ").strip()
+                        except Exception:
+                            pass
+
+                    svc = ServiceInfo(port, "tcp", local_addr, pid, proc_name, cmdline)
+                    svc.http_banner = probe_http_banner(port)
+                    services.append(svc)
+    except Exception:
+        # Fallback to python socket scanning on well-known ports
+        for port in WELL_KNOWN_PORTS.keys():
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.1)
+            result = sock.connect_ex(("127.0.0.1", port))
+            sock.close()
+            if result == 0:
+                svc = ServiceInfo(port, "tcp", f"127.0.0.1:{port}", None, "active_socket", "")
+                svc.http_banner = probe_http_banner(port)
+                services.append(svc)
+
+    # 2. Check running Docker containers
+    try:
+        docker_out = subprocess.check_output(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Ports}}"],
+            stderr=subprocess.DEVNULL
+        ).decode("utf-8")
+        for line in docker_out.strip().split("\n"):
+            if not line:
+                continue
+            cols = line.split("\t")
+            if len(cols) >= 3:
+                name, img, port_info = cols[0], cols[1], cols[2]
+                for p_match in re.finditer(r":(\d+)->", port_info):
+                    p = int(p_match.group(1))
+                    for svc in services:
+                        if svc.port == p:
+                            svc.is_docker = True
+                            svc.container_name = name
+                            svc.process_name = f"docker:{name} ({img})"
+    except Exception:
+        pass
+
+    services.sort(key=lambda s: s.port)
+    return services
+
+def scan_host_nginx_configs() -> Dict[str, any]:
+
+    """Inspects /etc/nginx configuration files and systemd service status."""
+    info = {
+        "is_installed": False,
+        "is_active_systemd": False,
+        "config_files": [],
+        "sites": [],
+    }
+
+    # 1. Check systemd status
+    try:
+        out = subprocess.check_output(["systemctl", "is-active", "nginx"], stderr=subprocess.DEVNULL).decode("utf-8").strip()
+        info["is_active_systemd"] = (out == "active")
+    except Exception:
+        info["is_active_systemd"] = False
+
+    # 2. Check /etc/nginx files
+    nginx_dirs = ["/etc/nginx", "/etc/nginx/conf.d", "/etc/nginx/sites-enabled"]
+    if os.path.exists("/etc/nginx"):
+        info["is_installed"] = True
+        for ndir in nginx_dirs:
+            if os.path.isdir(ndir):
+                for fname in os.listdir(ndir):
+                    if fname.endswith(".conf") or ndir.endswith("sites-enabled"):
+                        full_path = os.path.join(ndir, fname)
+                        if os.path.isfile(full_path):
+                            info["config_files"].append(full_path)
+                            try:
+                                with open(full_path, "r", errors="ignore") as f:
+                                    content = f.read()
+                                    server_names = re.findall(r"server_name\s+([^;]+);", content)
+                                    listen_ports = re.findall(r"listen\s+([^;]+);", content)
+                                    if server_names or listen_ports:
+                                        info["sites"].append({
+                                            "file": full_path,
+                                            "domains": [s.strip() for s in server_names],
+                                            "ports": [p.strip() for p in listen_ports],
+                                        })
+                            except Exception:
+                                pass
+    return info
+
+def print_nginx_inspection_report(nginx_info: Dict[str, any], services: List[ServiceInfo]):
+    print("\n" + "=" * 80)
+    print(f"{BOLD}🌐 NGINX & WEB SERVER DEEP INSPECTION{NC}")
+    print("=" * 80)
+
+    # Check port 80 and 443 listeners
+    p80_svc = next((s for s in services if s.port == 80), None)
+    p443_svc = next((s for s in services if s.port == 443), None)
+
+    # 1. Runtime Status
+    if nginx_info["is_active_systemd"]:
+        print(f"• Host Systemd Nginx:   {GREEN}ACTIVE & RUNNING{NC}")
+    elif nginx_info["is_installed"]:
+        print(f"• Host Systemd Nginx:   {YELLOW}INSTALLED BUT STOPPED{NC} (/etc/nginx)")
+    else:
+        print(f"• Host Systemd Nginx:   {CYAN}NOT INSTALLED ON HOST{NC}")
+
+    # 2. Port Bindings
+    if p80_svc:
+        p80_label = f"{CYAN}{p80_svc.process_name}{NC}" if p80_svc.is_docker else f"{YELLOW}{p80_svc.process_name}{NC}"
+        print(f"• Port 80 (HTTP):       {GREEN}IN USE{NC} by {p80_label}")
+    else:
+        print(f"• Port 80 (HTTP):       {GREEN}FREE / AVAILABLE{NC}")
+
+    if p443_svc:
+        p443_label = f"{CYAN}{p443_svc.process_name}{NC}" if p443_svc.is_docker else f"{YELLOW}{p443_svc.process_name}{NC}"
+        print(f"• Port 443 (HTTPS):     {GREEN}IN USE{NC} by {p443_label}")
+    else:
+        print(f"• Port 443 (HTTPS):     {GREEN}FREE / AVAILABLE{NC}")
+
+    # 3. Discovered Site Configurations
+    if nginx_info["sites"]:
+        print(f"\n{BOLD}📄 Discovered Host Site Configurations in /etc/nginx:{NC}")
+        for site in nginx_info["sites"]:
+            doms = ", ".join(site["domains"]) if site["domains"] else "default"
+            ports = ", ".join(site["ports"]) if site["ports"] else "80"
+            print(f"  • {site['file']} -> Domains: [{doms}] | Listening: [{ports}]")
+    elif nginx_info["is_installed"]:
+        print(f"\n• Host Nginx Configs:   Default template configuration found (No custom sites).")
+    else:
+        print(f"\n• Host Nginx Configs:   None (Clean host environment).")
+
+    print("=" * 80)
+
+    print("\n" + "=" * 80)
+    print(f"{BOLD}🔍 HOST SERVICE & PORT DISCOVERY REPORT{NC}")
+    print("=" * 80)
+    print(f"{'PORT':<8} {'STATUS':<12} {'CATEGORY':<32} {'PROCESS / CONTAINER':<26}")
+    print("-" * 80)
+
+    if not services:
+        print(f"  {GREEN}No active listening services detected on standard ports.{NC}")
+        print("=" * 80 + "\n")
+        return
+
+    for s in services:
+        status_str = f"{GREEN}ACTIVE{NC}"
+        banner = f" [{s.http_banner}]" if s.http_banner else ""
+        proc_str = s.process_name
+        if s.is_docker:
+            proc_str = f"{CYAN}{s.process_name}{NC}"
+        print(f"{s.port:<8} {status_str:<21} {s.category:<32} {proc_str:<26}{banner}")
+    print("=" * 80 + "\n")
+
+def generate_host_nginx_snippet(grafana_port: int = 3000, fastapi_port: int = 8000) -> str:
+    """Generates an Nginx server/location configuration snippet for host Nginx."""
+    return f"""# ==============================================================================
+# Observability Platform Reverse Proxy Snippet for Existing Host Nginx
+# Place this in /etc/nginx/conf.d/observability.conf or include in your server block
+# ==============================================================================
+
+# 1. Grafana Monitoring UI
+location /grafana/ {{
+    proxy_pass http://127.0.0.1:{grafana_port}/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}}
+
+# 2. FastAPI Application Proxy
+location /api/ {{
+    proxy_pass http://127.0.0.1:{fastapi_port}/api/;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}}
+
+# 3. FastAPI Health Checks
+location /health/ {{
+    proxy_pass http://127.0.0.1:{fastapi_port}/health/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+}}
+"""
+
+def interactive_service_resolver(services: List[ServiceInfo]) -> Dict[str, str]:
+    """Prompts the user with tailored integration options based on discovered services."""
+    resolutions = {}
+    
+    ports_map = {s.port: s for s in services}
+    non_stack_services = [s for s in services if not s.container_name.startswith("vps-")]
+
+    if not non_stack_services:
+        print(f"{GREEN}✓ No conflicting host services detected. All standard ports are available!{NC}")
+        return resolutions
+
+    print(f"\n{BOLD}🎯 Discovered Pre-Existing Services on Host:{NC}")
+    print("Let's configure how the Observability platform should interact with them:\n")
+
+    # 1. Check for Pre-existing Nginx / Port 80 / 443
+    if 80 in ports_map or 443 in ports_map:
+        nginx_svc = ports_map.get(80) or ports_map.get(443)
+        if not nginx_svc.container_name.startswith("vps-"):
+            print(f"{YELLOW}[!] Detected pre-existing Web Server on Port 80/443 ({nginx_svc.process_name}){NC}")
+            print("  [1] Use existing Host Nginx (Recommended: Generates /etc/nginx snippet for Grafana & API, avoids port collision)")
+            print("  [2] Remap Docker Nginx to alternative ports (e.g., HTTP :8088 / HTTPS :8443)")
+            print("  [3] Keep default ports :80/:443 (Requires stopping the existing host service)")
+
+            choice = input("Enter choice [1-3] (Default: 1): ").strip() or "1"
+            if choice == "1":
+                resolutions["NGINX_MODE"] = "HOST_EXISTING"
+                resolutions["NGINX_HTTP_PORT"] = "8088"
+                resolutions["NGINX_HTTPS_PORT"] = "8443"
+                snippet = generate_host_nginx_snippet(3000, 8000)
+                os.makedirs("configs/nginx_host_snippets", exist_ok=True)
+                with open("configs/nginx_host_snippets/observability.conf", "w") as f:
+                    f.write(snippet)
+                print(f"  {GREEN}✓ Generated host Nginx snippet at: configs/nginx_host_snippets/observability.conf{NC}")
+            elif choice == "2":
+                alt_http = input("Enter alternative HTTP port [8088]: ").strip() or "8088"
+                alt_https = input("Enter alternative HTTPS port [8443]: ").strip() or "8443"
+                resolutions["NGINX_HTTP_PORT"] = alt_http
+                resolutions["NGINX_HTTPS_PORT"] = alt_https
+            else:
+                resolutions["NGINX_HTTP_PORT"] = "80"
+                resolutions["NGINX_HTTPS_PORT"] = "443"
+
+    # 2. Check for Pre-existing Backend / API on 8000 or 5000
+    if 8000 in ports_map and not ports_map[8000].container_name.startswith("vps-"):
+        app_svc = ports_map[8000]
+        print(f"\n{YELLOW}[!] Detected pre-existing application on Port 8000 ({app_svc.process_name}){NC}")
+        print("  [1] Remap Monitoring FastAPI Demo app to Port 8001")
+        print("  [2] Monitor existing application on Port 8000 (Target in Prometheus scraping)")
+        choice = input("Enter choice [1-2] (Default: 1): ").strip() or "1"
+        if choice == "1":
+            resolutions["FASTAPI_PORT"] = "8001"
+        else:
+            resolutions["MONITOR_EXISTING_APP_PORT"] = "8000"
+
+    # 3. Check for Pre-existing Grafana / Port 3000
+    if 3000 in ports_map and not ports_map[3000].container_name.startswith("vps-"):
+        print(f"\n{YELLOW}[!] Detected pre-existing service on Port 3000 ({ports_map[3000].process_name}){NC}")
+        alt_grafana = input("Enter alternative port for Grafana [3001]: ").strip() or "3001"
+        resolutions["GRAFANA_PORT"] = alt_grafana
+
+    # 4. Check for Pre-existing Databases (Postgres 5432 / Redis 6379 / MySQL 3306)
+    db_found = []
+    if 5432 in ports_map: db_found.append("PostgreSQL (:5432)")
+    if 6379 in ports_map: db_found.append("Redis (:6379)")
+    if 3306 in ports_map: db_found.append("MySQL (:3306)")
+    if db_found:
+        print(f"\n{GREEN}✓ Detected active databases: {', '.join(db_found)}{NC}")
+        print("  Observability platform will monitor database connection latency automatically.")
+
+    return resolutions
+
+def apply_resolutions_to_env(resolutions: Dict[str, str], env_file: str = ".env"):
+    """Updates .env with discovered resolutions."""
+    if not resolutions:
+        return
+    if not os.path.exists(env_file):
+        if os.path.exists(".env.example"):
+            import shutil
+            shutil.copy(".env.example", env_file)
+        else:
+            with open(env_file, "w") as f:
+                f.write("")
+
+    with open(env_file, "r") as f:
+        lines = f.readlines()
+
+    updated_keys = set()
+    new_lines = []
+    for line in lines:
+        matched = False
+        for k, v in resolutions.items():
+            if line.startswith(f"{k}="):
+                new_lines.append(f"{k}={v}\n")
+                updated_keys.add(k)
+                matched = True
+                break
+        if not matched:
+            new_lines.append(line)
+
+    for k, v in resolutions.items():
+        if k not in updated_keys:
+            new_lines.append(f"{k}={v}\n")
+
+    with open(env_file, "w") as f:
+        f.writelines(new_lines)
+
+    print(f"\n{GREEN}✅ Applied discovered configuration options to {env_file}:{NC}")
+    for k, v in resolutions.items():
+        print(f"  • {k}={v}")
+
+def run_scan_workflow(interactive: bool = True):
+    print("\n🔍 Scanning host listening ports, running services, and Nginx configurations...")
+    services = scan_listening_ports()
+    nginx_info = scan_host_nginx_configs()
+    print_nginx_inspection_report(nginx_info, services)
+    print_discovery_table(services)
+
+    if interactive:
+        resolutions = interactive_service_resolver(services)
+        if resolutions:
+            apply_resolutions_to_env(resolutions)
+    return services
+
+if __name__ == "__main__":
+    run_scan_workflow(interactive=True)
+

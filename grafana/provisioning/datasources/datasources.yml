@@ -1,0 +1,59 @@
+apiVersion: 1
+
+datasources:
+  # ----------------------------------------------------------------------------
+  # 1. Prometheus (Core Metrics)
+  # ----------------------------------------------------------------------------
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: prometheus
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+
+  # ----------------------------------------------------------------------------
+  # 2. Loki (Log Aggregation with Trace Correlation)
+  # ----------------------------------------------------------------------------
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: loki
+    editable: false
+    jsonData:
+      maxLines: 2000
+      derivedFields:
+        # Jump directly from Loki log line into Tempo Trace graph!
+        - datasourceUid: tempo
+          matcherRegex: "trace_id[\"']?\\s*[:=]\\s*[\"']?([0-9a-fA-F]+)"
+          name: TraceID
+          url: '$${__value.raw}'
+
+  # ----------------------------------------------------------------------------
+  # 3. Tempo (Distributed Tracing with Log Correlation)
+  # ----------------------------------------------------------------------------
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo
+    editable: false
+    jsonData:
+      httpMethod: GET
+      tracesToLogs:
+        datasourceUid: loki
+        filterByTraceID: true
+        filterBySpanID: false
+        query: '{app="fastapi-app"} |= "$${__trace.id}"'
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki

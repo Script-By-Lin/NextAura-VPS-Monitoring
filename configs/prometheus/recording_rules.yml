@@ -1,0 +1,26 @@
+groups:
+  - name: fast_recording_rules
+    interval: 15s
+    rules:
+      # Pre-calculated RPS across all endpoints
+      - record: job:http_requests:rate5m
+        expr: sum by (job, status_code) (rate(http_requests_total[5m]))
+
+      # Pre-calculated 5xx error ratio
+      - record: job:http_errors:ratio5m
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))
+
+      # Pre-calculated p95 and p99 latency per endpoint
+      - record: endpoint:http_request_duration_seconds:p95_5m
+        expr: histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: endpoint:http_request_duration_seconds:p99_5m
+        expr: histogram_quantile(0.99, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Host CPU utilization percent
+      - record: instance:node_cpu_utilization:percent
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Host Memory utilization percent
+      - record: instance:node_memory_utilization:percent
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100

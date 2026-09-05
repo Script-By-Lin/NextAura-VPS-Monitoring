@@ -1,0 +1,24 @@
+{{ define "telegram.default.message" }}
+{{ if eq .Status "firing" }}
+🔥 <b>[ALERT FIRING - {{ .Alerts | len }}]</b>
+{{ else }}
+✅ <b>[ALERT RESOLVED]</b>
+{{ end }}
+
+{{ range .Alerts }}
+<b>Alert:</b> <code>{{ .Labels.alertname }}</code>
+<b>Severity:</b> {{ if eq .Labels.severity "critical" }}🔴 CRITICAL{{ else if eq .Labels.severity "warning" }}🟡 WARNING{{ else }}🔵 INFO{{ end }}
+<b>Category:</b> <i>{{ .Labels.category }}</i>
+<b>Service:</b> <code>{{ if .Labels.service }}{{ .Labels.service }}{{ else }}{{ .Labels.job }}{{ end }}</code>
+<b>Instance:</b> <code>{{ .Labels.instance }}</code>
+
+<b>Summary:</b> {{ .Annotations.summary }}
+<b>Description:</b> {{ .Annotations.description }}
+{{ if .Annotations.runbook_url }}
+📖 <a href="{{ .Annotations.runbook_url }}">Incident Runbook</a>
+{{ end }}
+<b>Triggered At:</b> {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+-----------------------------------
+{{ end }}
+🌐 <b>Observability Stack:</b> <a href="http://localhost:3000">Open Grafana</a>
+{{ end }}
