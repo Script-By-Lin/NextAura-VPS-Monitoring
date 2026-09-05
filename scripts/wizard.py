@@ -261,7 +261,7 @@ LOKI_RETENTION_PERIOD=720h
 FAIL2BAN_FINDTIME={f2b_find_time}
 FAIL2BAN_MAXRETRY={f2b_max_retry}
 FAIL2BAN_BANTIME={ban_time_sec}
-FAIL2BAN_WHITELIST={f2b_whitelist}
+FAIL2BAN_WHITELIST="{f2b_whitelist}"
 """
     with open(".env", "w") as f:
         f.write(env_content)

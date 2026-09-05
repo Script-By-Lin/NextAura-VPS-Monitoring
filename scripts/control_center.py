@@ -32,10 +32,16 @@ BANNER = r"""
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
+def get_compose_cmd():
+    if subprocess.call(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+        return ["docker", "compose"]
+    return ["docker-compose"]
+
 def get_quick_status() -> str:
     """Returns a one-line summary of container health."""
     try:
-        out = subprocess.check_output(["docker-compose", "ps", "-q"], stderr=subprocess.DEVNULL).decode("utf-8").strip()
+        cmd = get_compose_cmd() + ["ps", "-q"]
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
         count = len(out.splitlines()) if out else 0
         if count >= 10:
             return f"{GREEN}● ALL SERVICES RUNNING ({count} Containers Active){NC}"
@@ -125,13 +131,13 @@ def main():
             break
         elif choice == "1":
             print("\n🚀 Starting all NextAura services...")
-            run_command(["docker-compose", "up", "-d", "--build"])
+            run_command(get_compose_cmd() + ["up", "-d", "--build"])
         elif choice == "2":
             print("\n🛑 Stopping all services...")
-            run_command(["docker-compose", "down"])
+            run_command(get_compose_cmd() + ["down"])
         elif choice == "3":
             print("\n🔄 Restarting all services...")
-            run_command(["docker-compose", "restart"])
+            run_command(get_compose_cmd() + ["restart"])
         elif choice == "4":
             run_command(["python3", "scripts/scanner.py"])
         elif choice == "5":
@@ -154,7 +160,7 @@ def main():
             run_command(["bash", "scripts/security_hardening.sh"])
         elif choice == "13":
             print(f"\n{YELLOW}Streaming logs (Press Ctrl+C to stop)...{NC}")
-            run_command(["docker-compose", "logs", "-f", "--tail=50"], wait=True)
+            run_command(get_compose_cmd() + ["logs", "-f", "--tail=50"], wait=True)
         elif choice == "14":
             show_urls()
             input(f"\n{YELLOW}Press Enter to return to menu...{NC}")

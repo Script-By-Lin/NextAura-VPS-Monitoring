@@ -79,16 +79,22 @@ if [ -f "scripts/healthcheck.sh" ]; then
 fi
 
 # STEP 6: Finished - Launch Control Menu
+if [ -f .env ]; then
+    set -a
+    . .env
+    set +a
+fi
+
 echo -e "\n================================================================"
 echo -e " 🎉 NEXTAURA IS SUCCESSFULLY DEPLOYED & RUNNING!               "
 echo -e "================================================================"
-echo -e "📊 Grafana Dashboards:       http://localhost:3000 (User: admin)"
-echo -e "🚀 FastAPI Service:          http://localhost:8000"
-echo -e "📈 Prometheus TSDB:          http://localhost:9090"
-echo -e "🚨 Alertmanager:             http://localhost:9093"
-echo -e "📜 Loki Logs:                http://localhost:3100"
-echo -e "⏱️  Tempo Traces:             http://localhost:3200"
-echo -e "🌐 Nginx Reverse Proxy:      http://localhost:80"
+echo -e "📊 Grafana Dashboards:       http://localhost:${GRAFANA_PORT:-3000} (User: ${GRAFANA_ADMIN_USER:-admin})"
+echo -e "🚀 FastAPI Service:          http://localhost:${FASTAPI_PORT:-8000}"
+echo -e "📈 Prometheus TSDB:          http://localhost:${PROMETHEUS_PORT:-9090}"
+echo -e "🚨 Alertmanager:             http://localhost:${ALERTMANAGER_PORT:-9093}"
+echo -e "📜 Loki Logs:                http://localhost:${LOKI_PORT:-3100}"
+echo -e "⏱️  Tempo Traces:             http://localhost:${TEMPO_PORT:-3200}"
+echo -e "🌐 Nginx Reverse Proxy:      http://localhost:${NGINX_HTTP_PORT:-80}"
 echo -e "================================================================"
 echo -e "\n💡 Tip: To manage your platform anytime, simply run: make or make menu\n"
 

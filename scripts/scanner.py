@@ -662,7 +662,8 @@ def run_scan_workflow(interactive: bool = True):
     return services
 
 if __name__ == "__main__":
-    run_scan_workflow(interactive=True)
+    is_interactive = "--non-interactive" not in sys.argv and "-y" not in sys.argv and "--auto" not in sys.argv
+    run_scan_workflow(interactive=is_interactive)
 
 
 

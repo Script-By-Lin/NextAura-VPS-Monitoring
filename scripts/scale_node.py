@@ -117,8 +117,18 @@ def add_node_to_prometheus(node_name: str, ip: str, config_path: str = "configs/
     print(f"{GREEN}✓ Added {node_name} ({ip}) to Prometheus configuration.{NC}")
 
     # Reload Prometheus
+    prom_port = "9090"
+    if os.path.exists(".env"):
+        try:
+            with open(".env", "r") as env_f:
+                for line in env_f:
+                    if line.startswith("PROMETHEUS_PORT="):
+                        prom_port = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+
     try:
-        req = urllib.request.Request("http://localhost:9090/-/reload", method="POST")
+        req = urllib.request.Request(f"http://localhost:{prom_port}/-/reload", method="POST")
         with urllib.request.urlopen(req, timeout=3) as resp:
             if resp.status == 200:
                 print(f"{GREEN}✓ Prometheus hot-reloaded successfully.{NC}")
@@ -234,12 +244,22 @@ def scale_new_vps_node():
     except Exception as e:
         print(f"{YELLOW}Note: Scrape test from master had notice: {e}. (Ensure firewall allows master IP to reach {ip}:9100/8080){NC}")
 
+    graf_port = "3000"
+    if os.path.exists(".env"):
+        try:
+            with open(".env", "r") as env_f:
+                for line in env_f:
+                    if line.startswith("GRAFANA_PORT="):
+                        graf_port = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+
     print("\n" + "=" * 70)
     print(f"{GREEN}🎉 REMOTE VPS NODE ONBOARDED SUCCESSFULLY!{NC}")
     print("=" * 70)
-    print(f"🖥 <b>Node Name:</b>      {BOLD}{node_name}{NC}")
-    print(f"🌐 <b>Node IP:</b>        {BOLD}{ip}{NC}")
-    print(f"📊 <b>Dashboard:</b>      Open Grafana at http://localhost:3000 to view both nodes!")
+    print(f"🖥 Node Name:      {BOLD}{node_name}{NC}")
+    print(f"🌐 Node IP:        {BOLD}{ip}{NC}")
+    print(f"📊 Dashboard:      Open Grafana at http://localhost:{graf_port} to view both nodes!")
     print("=" * 70 + "\n")
 
 if __name__ == "__main__":

@@ -66,20 +66,22 @@ wizard:
 
 
 
+COMPOSE ?= $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || echo "docker compose")
+
 up:
-	docker-compose up -d --build
+	$(COMPOSE) up -d --build
 
 down:
-	docker-compose down
+	$(COMPOSE) down
 
 restart:
-	docker-compose restart
+	$(COMPOSE) restart
 
 status:
-	docker-compose ps
+	$(COMPOSE) ps
 
 logs:
-	docker-compose logs -f --tail=100
+	$(COMPOSE) logs -f --tail=100
 
 healthcheck:
 	bash scripts/healthcheck.sh
@@ -91,4 +93,4 @@ test-alert:
 	bash scripts/test_alert.sh
 
 clean:
-	docker-compose down -v
+	$(COMPOSE) down -v

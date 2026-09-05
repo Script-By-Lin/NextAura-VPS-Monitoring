@@ -86,8 +86,10 @@ echo -e "\n${YELLOW}[4/5] Vacuuming systemd journal logs older than ${RETENTION_
 if command -v journalctl &> /dev/null; then
     if [ "$EUID" -eq 0 ]; then
         journalctl --vacuum-time="${RETENTION_DAYS}d" 2>/dev/null || true
-    else
+    elif sudo -n true 2>/dev/null; then
         sudo journalctl --vacuum-time="${RETENTION_DAYS}d" 2>/dev/null || true
+    else
+        journalctl --user --vacuum-time="${RETENTION_DAYS}d" 2>/dev/null || true
     fi
     echo -e "  ${GREEN}✓ Systemd journal vacuumed to ${RETENTION_DAYS}-day window.${NC}"
 else

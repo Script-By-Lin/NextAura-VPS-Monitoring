@@ -59,7 +59,7 @@ check_endpoint "Blackbox Exporter" "http://localhost:${BBOX_P}" 200
 
 echo -e "\n${YELLOW}2. Checking Prometheus Scrape Target Statuses:${NC}"
 if command -v jq &> /dev/null; then
-    targets=$(curl -s "http://localhost:9090/api/v1/targets" 2>/dev/null || echo "{}")
+    targets=$(curl -s "http://localhost:${PROM_P}/api/v1/targets" 2>/dev/null || echo "{}")
     active_count=$(echo "$targets" | jq '.data.activeTargets | length' 2>/dev/null || echo "0")
     healthy_count=$(echo "$targets" | jq '[.data.activeTargets[] | select(.health == "up")] | length' 2>/dev/null || echo "0")
     echo -e "  Active Scrape Targets: ${GREEN}$healthy_count / $active_count UP${NC}"

@@ -182,11 +182,23 @@ def add_promtail_log_stream(service_name: str, log_file_path: str, promtail_file
         print(f"  {YELLOW}Warning: Could not update Promtail config: {e}{NC}")
         return False
 
+def get_env_port(key: str, default: str) -> str:
+    if os.path.exists(".env"):
+        try:
+            with open(".env", "r") as f:
+                for line in f:
+                    if line.startswith(f"{key}="):
+                        return line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return os.getenv(key, default)
+
 def reload_monitoring_stack():
     """Reloads Prometheus & Promtail configs gracefully."""
+    prom_port = get_env_port("PROMETHEUS_PORT", "9090")
     print(f"\n{YELLOW}Reloading Prometheus configuration...{NC}")
     try:
-        req = urllib.request.Request("http://127.0.0.1:9090/-/reload", data=b"", method="POST")
+        req = urllib.request.Request(f"http://127.0.0.1:{prom_port}/-/reload", data=b"", method="POST")
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             if resp.status == 200:
                 print(f"  {GREEN}✓ Prometheus reloaded successfully via live API!{NC}")
@@ -196,7 +208,8 @@ def reload_monitoring_stack():
 
     # Fallback to docker restart
     try:
-        subprocess.run(["docker-compose", "restart", "prometheus"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd = ["docker", "compose", "restart", "prometheus"] if subprocess.call(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0 else ["docker-compose", "restart", "prometheus"]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print(f"  {GREEN}✓ Prometheus container restarted with new targets.{NC}")
     except Exception:
         print(f"  {YELLOW}Note: Run 'make restart' to apply changes.{NC}")
@@ -284,6 +297,7 @@ def interactive_monitor_api_wizard():
     reload_monitoring_stack()
 
     # Step 5: Finished Summary
+    grafana_port = get_env_port("GRAFANA_PORT", "3000")
     print("\n" + "=" * 75)
     print(f"{GREEN}🎉 API '{api_name}' IS NOW ACTIVELY MONITORED BY NEXTAURA!{NC}")
     print("=" * 75)
@@ -295,8 +309,8 @@ def interactive_monitor_api_wizard():
     print(f"• {BOLD}Your API Setup:{NC}       {GREEN}100% Untouched (0 modifications to your configs){NC}")
     print("=" * 75)
     print(f"\n📊 {BOLD}View live API performance now in Grafana:{NC}")
-    print(f"  • {CYAN}http://localhost:3000/d/api-apm-performance-v1{NC}")
-    print(f"  • {CYAN}http://localhost:3000/d/infra-overview-v1{NC}\n")
+    print(f"  • {CYAN}http://localhost:{grafana_port}/d/api-apm-performance-v1{NC}")
+    print(f"  • {CYAN}http://localhost:{grafana_port}/d/infra-overview-v1{NC}\n")
 
 if __name__ == "__main__":
     interactive_monitor_api_wizard()
