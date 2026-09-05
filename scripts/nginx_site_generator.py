@@ -168,6 +168,14 @@ def interactive_site_creator():
     os.makedirs(target_dir, exist_ok=True)
     target_path = os.path.join(target_dir, clean_file_name)
 
+    if os.path.exists(target_path):
+        print(f"\n{YELLOW}[!] Notice: Configuration file '{clean_file_name}' already exists.{NC}")
+        overwrite = prompt_yes_no("Do you want to overwrite this file?", default=False)
+        if not overwrite:
+            new_name = prompt_input("Enter a new file name", default=f"{service_name.lower().replace(' ', '_')}_custom")
+            clean_file_name = f"{new_name.replace(' ', '_')}.conf"
+            target_path = os.path.join(target_dir, clean_file_name)
+
     with open(target_path, "w") as f:
         f.write(config_content)
 
@@ -177,6 +185,16 @@ def interactive_site_creator():
     print(f"📁 {BOLD}Config File Path:{NC}  {CYAN}{target_path}{NC}")
     print(f"🌐 {BOLD}Routing:{NC}           http://{domain} ──► http://{upstream_target}")
     print("=" * 70)
+
+    # Ask if user wants to monitor this site with Prometheus Blackbox
+    if domain and domain != "_":
+        mon_site = prompt_yes_no(f"Add '{domain}' to Prometheus Blackbox Uptime & SSL Monitor?", default=True)
+        if mon_site:
+            try:
+                import scanner
+                scanner.add_blackbox_targets([f"http://{domain}"])
+            except Exception:
+                pass
 
     # Reload Nginx container if running
     try:
@@ -192,3 +210,4 @@ def interactive_site_creator():
 
 if __name__ == "__main__":
     interactive_site_creator()
+

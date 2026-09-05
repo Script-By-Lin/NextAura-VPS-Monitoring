@@ -361,63 +361,167 @@ location /health/ {{
 }}
 """
 
-def interactive_service_resolver(services: List[ServiceInfo]) -> Dict[str, str]:
-    """Prompts the user with tailored integration options based on discovered services."""
+def add_blackbox_targets(urls: List[str], prom_file: str = "configs/prometheus/prometheus.yml"):
+    """Safely adds custom endpoints/domains to Prometheus Blackbox HTTP probing without modifying existing configuration."""
+    if not os.path.exists(prom_file) or not urls:
+        return
+    try:
+        with open(prom_file, "r") as f:
+            content = f.read()
+
+        added = []
+        for u in urls:
+            url_str = u if u.startswith("http://") or u.startswith("https://") else f"http://{u}"
+            if url_str not in content:
+                # Add to targets list under blackbox-http
+                target_entry = f"          - '{url_str}'\n"
+                if "- 'http://fastapi-app:8000/health/live'" in content:
+                    content = content.replace(
+                        "- 'http://fastapi-app:8000/health/live'",
+                        f"- '{url_str}'\n          - 'http://fastapi-app:8000/health/live'"
+                    )
+                    added.append(url_str)
+
+        if added:
+            with open(prom_file, "w") as f:
+                f.write(content)
+            print(f"  {GREEN}✓ Added {len(added)} domain(s) to Prometheus Blackbox Uptime & SSL Monitor:{NC}")
+            for a in added:
+                print(f"    • {a}")
+    except Exception as e:
+        print(f"  {YELLOW}Warning: Could not update Blackbox targets in {prom_file}: {e}{NC}")
+
+def add_custom_scrape_job(job_name: str, target: str, metrics_path: str = "/metrics", prom_file: str = "configs/prometheus/prometheus.yml"):
+    """Safely appends a custom user service scrape job to Prometheus."""
+    if not os.path.exists(prom_file):
+        return
+    try:
+        with open(prom_file, "r") as f:
+            content = f.read()
+
+        if f"job_name: '{job_name}'" in content or target in content:
+            return
+
+        new_job = f"""
+  # ----------------------------------------------------------------------------
+  # Custom User Service: {job_name}
+  # ----------------------------------------------------------------------------
+  - job_name: '{job_name}'
+    metrics_path: '{metrics_path}'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['{target}']
+        labels:
+          tier: 'custom-application'
+          service: '{job_name}'
+"""
+        content += new_job
+        with open(prom_file, "w") as f:
+            f.write(content)
+        print(f"  {GREEN}✓ Added custom Prometheus scrape job '{job_name}' targeting {target}{metrics_path}{NC}")
+    except Exception as e:
+        print(f"  {YELLOW}Warning: Could not add custom scrape job: {e}{NC}")
+
+def interactive_service_resolver(services: List[ServiceInfo], nginx_info: Optional[Dict[str, any]] = None) -> Dict[str, str]:
+    """Prompts the user with tailored integration options based on discovered services.
+    Guarantees that user's manual configuration is NEVER modified or overwritten.
+    """
     resolutions = {}
     ports_map = {s.port: s for s in services}
     non_stack_services = [s for s in services if not s.container_name.startswith("vps-")]
 
-    if not non_stack_services:
-        print(f"{GREEN}✓ No conflicting host services detected. All standard ports are available!{NC}")
+    print(f"\n{GREEN}================================================================================{NC}")
+    print(f"{BOLD}🛡️  SAFETY GUARANTEE: PRESERVATION OF MANUAL CONFIGURATIONS{NC}")
+    print(f"{GREEN}================================================================================{NC}")
+    print(f"• NextAura will {BOLD}NEVER modify, overwrite, or delete{NC} your manual configs in /etc/nginx.")
+    print(f"• Your existing services and websites will continue running without interruption.")
+    print(f"• NextAura will only monitor your existing services if you explicitly choose to.")
+    print(f"{GREEN}================================================================================{NC}\n")
+
+    if not non_stack_services and not (nginx_info and nginx_info.get("is_installed")):
+        print(f"{GREEN}✓ Clean host environment detected. All standard ports are available!{NC}")
         return resolutions
 
-    print(f"\n{BOLD}🎯 Discovered Pre-Existing Services on Host:{NC}")
-    print("Let's configure how NextAura should interact with them:\n")
-
-    # 1. Check for Pre-existing Nginx / Port 80 / 443
-    if 80 in ports_map or 443 in ports_map:
+    # 1. Check for Pre-existing Host Nginx / Reverse Proxy
+    if 80 in ports_map or 443 in ports_map or (nginx_info and nginx_info.get("is_installed")):
         nginx_svc = ports_map.get(80) or ports_map.get(443)
-        if not nginx_svc.container_name.startswith("vps-"):
-            print(f"{YELLOW}[!] Detected pre-existing Web Server on Port 80/443 ({nginx_svc.process_name}){NC}")
-            print("  [1] Use existing Host Nginx (Recommended: Generates /etc/nginx snippet for Grafana & API, avoids port collision)")
-            print("  [2] Remap Docker Nginx to alternative ports (e.g., HTTP :8088 / HTTPS :8443)")
-            print("  [3] Keep default ports :80/:443 (Requires stopping the existing host service)")
+        proc_label = nginx_svc.process_name if nginx_svc else "Host Nginx"
+        
+        discovered_domains = []
+        if nginx_info and nginx_info.get("sites"):
+            for site in nginx_info["sites"]:
+                for d in site.get("domains", []):
+                    if d not in ("_", "localhost", "default") and d not in discovered_domains:
+                        discovered_domains.append(d)
 
-            choice = input("Enter choice [1-3] (Default: 1): ").strip() or "1"
-            if choice == "1":
-                resolutions["NGINX_MODE"] = "HOST_EXISTING"
-                resolutions["NGINX_HTTP_PORT"] = "8088"
-                resolutions["NGINX_HTTPS_PORT"] = "8443"
-                snippet = generate_host_nginx_snippet(3000, 8000)
-                os.makedirs("configs/nginx_host_snippets", exist_ok=True)
-                with open("configs/nginx_host_snippets/observability.conf", "w") as f:
-                    f.write(snippet)
-                print(f"  {GREEN}✓ Generated host Nginx snippet at: configs/nginx_host_snippets/observability.conf{NC}")
-            elif choice == "2":
-                alt_http = input("Enter alternative HTTP port [8088]: ").strip() or "8088"
-                alt_https = input("Enter alternative HTTPS port [8443]: ").strip() or "8443"
-                resolutions["NGINX_HTTP_PORT"] = alt_http
-                resolutions["NGINX_HTTPS_PORT"] = alt_https
-            else:
-                resolutions["NGINX_HTTP_PORT"] = "80"
-                resolutions["NGINX_HTTPS_PORT"] = "443"
+        print(f"{BOLD}🌐 Existing Nginx / Reverse Proxy Detected ({proc_label}){NC}")
+        if discovered_domains:
+            print(f"• Found manual website domains: {CYAN}{', '.join(discovered_domains)}{NC}")
+
+        print("\nHow would you like NextAura to handle your existing Nginx reverse proxy?")
+        print(f"  {CYAN}[1] (Recommended) Monitor Existing Nginx & Websites:{NC}")
+        print("      - Keep your /etc/nginx files 100% UNCHANGED and intact.")
+        print("      - Monitor your website domains via Prometheus Blackbox (Uptime, HTTP 200, SSL expiry).")
+        print("      - Stream host Nginx access logs to Loki & Fail2ban attack maps (Read-Only).")
+        print("      - Run NextAura's internal Nginx on :8088 to avoid port collision with your site.")
+        print("      - Generate an optional snippet file (configs/nginx_host_snippets/nextaura_proxy.conf).")
+        print(f"  {CYAN}[2] Run in Isolated Mode:{NC}")
+        print("      - Run NextAura on separate port (:8088) without monitoring host Nginx.")
+        print(f"  {CYAN}[3] Use Default Ports :80/:443:{NC}")
+        print("      - Use port 80/443 for NextAura (Only if you intend to stop your host web server).")
+
+        choice = input("\nEnter choice [1-3] (Default: 1): ").strip() or "1"
+        if choice == "1":
+            resolutions["NGINX_MODE"] = "HOST_EXISTING"
+            resolutions["NGINX_HTTP_PORT"] = "8088"
+            resolutions["NGINX_HTTPS_PORT"] = "8443"
+            
+            # Ask which domains to monitor with Blackbox
+            if discovered_domains:
+                mon_domains = input(f"\nMonitor discovered domains [{', '.join(discovered_domains)}]? (Y/n): ").strip().lower()
+                if mon_domains not in ("n", "no"):
+                    add_blackbox_targets([f"http://{d}" for d in discovered_domains])
+            
+            # Prompt for any additional custom websites to monitor
+            extra_url = input("\nEnter any other custom website URL to monitor (or press Enter to skip): ").strip()
+            if extra_url:
+                add_blackbox_targets([extra_url])
+
+            snippet = generate_host_nginx_snippet(3000, 8000)
+            os.makedirs("configs/nginx_host_snippets", exist_ok=True)
+            with open("configs/nginx_host_snippets/nextaura_proxy.conf", "w") as f:
+                f.write(snippet)
+            print(f"  {GREEN}✓ Generated safe proxy snippet at: configs/nginx_host_snippets/nextaura_proxy.conf{NC}")
+            print(f"  {CYAN}  (You can optionally include this in your /etc/nginx block if you wish to access Grafana at yourdomain.com/grafana/){NC}")
+
+        elif choice == "2":
+            alt_http = input("Enter alternative HTTP port for NextAura [8088]: ").strip() or "8088"
+            alt_https = input("Enter alternative HTTPS port for NextAura [8443]: ").strip() or "8443"
+            resolutions["NGINX_HTTP_PORT"] = alt_http
+            resolutions["NGINX_HTTPS_PORT"] = alt_https
+        else:
+            resolutions["NGINX_HTTP_PORT"] = "80"
+            resolutions["NGINX_HTTPS_PORT"] = "443"
 
     # 2. Check for Pre-existing Backend / API on 8000 or 5000
     if 8000 in ports_map and not ports_map[8000].container_name.startswith("vps-"):
         app_svc = ports_map[8000]
-        print(f"\n{YELLOW}[!] Detected pre-existing application on Port 8000 ({app_svc.process_name}){NC}")
-        print("  [1] Remap Monitoring FastAPI Demo app to Port 8001")
-        print("  [2] Monitor existing application on Port 8000 (Target in Prometheus scraping)")
+        print(f"\n{BOLD}🚀 Detected Pre-Existing Application on Port 8000 ({app_svc.process_name}){NC}")
+        print("Your application will NOT be changed. How would you like NextAura to handle it?")
+        print(f"  {CYAN}[1] Monitor my application with Prometheus & Blackbox (Remaps NextAura demo app to :8001){NC}")
+        print(f"  {CYAN}[2] Do not monitor my application (Remaps NextAura demo app to :8001){NC}")
         choice = input("Enter choice [1-2] (Default: 1): ").strip() or "1"
+        resolutions["FASTAPI_PORT"] = "8001"
         if choice == "1":
-            resolutions["FASTAPI_PORT"] = "8001"
-        else:
-            resolutions["MONITOR_EXISTING_APP_PORT"] = "8000"
+            app_metrics = input("Enter metrics endpoint path for your app [/metrics]: ").strip() or "/metrics"
+            add_custom_scrape_job("user-custom-api", "host.docker.internal:8000", app_metrics)
+            add_blackbox_targets(["http://host.docker.internal:8000/"])
 
     # 3. Check for Pre-existing Grafana / Port 3000
     if 3000 in ports_map and not ports_map[3000].container_name.startswith("vps-"):
         print(f"\n{YELLOW}[!] Detected pre-existing service on Port 3000 ({ports_map[3000].process_name}){NC}")
-        alt_grafana = input("Enter alternative port for Grafana [3001]: ").strip() or "3001"
+        print("NextAura will preserve your existing service on port 3000.")
+        alt_grafana = input("Enter alternative port for NextAura Grafana [3001]: ").strip() or "3001"
         resolutions["GRAFANA_PORT"] = alt_grafana
 
     # 4. Check for Pre-existing Databases (Postgres 5432 / Redis 6379 / MySQL 3306)
@@ -425,9 +529,10 @@ def interactive_service_resolver(services: List[ServiceInfo]) -> Dict[str, str]:
     if 5432 in ports_map: db_found.append("PostgreSQL (:5432)")
     if 6379 in ports_map: db_found.append("Redis (:6379)")
     if 3306 in ports_map: db_found.append("MySQL (:3306)")
+    if 27017 in ports_map: db_found.append("MongoDB (:27017)")
     if db_found:
-        print(f"\n{GREEN}✓ Detected active databases: {', '.join(db_found)}{NC}")
-        print("  Observability platform will monitor database connection latency automatically.")
+        print(f"\n{GREEN}✓ Detected active databases on host: {', '.join(db_found)}{NC}")
+        print("  NextAura will monitor database port connectivity passively without modifying any DB data.")
 
     return resolutions
 
@@ -482,13 +587,14 @@ def run_scan_workflow(interactive: bool = True):
     print_discovery_table(services)
 
     if interactive:
-        resolutions = interactive_service_resolver(services)
+        resolutions = interactive_service_resolver(services, nginx_info)
         if resolutions:
             apply_resolutions_to_env(resolutions)
     return services
 
 if __name__ == "__main__":
     run_scan_workflow(interactive=True)
+
 
 
 
