@@ -1,7 +1,13 @@
-.PHONY: help up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
+.PHONY: default menu help up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
+
+default: menu
+
+menu:
+	python3 scripts/control_center.py
 
 help:
-	@echo "VPS Monitoring & Security Platform Commands:"
+	@echo "NextAura VPS Monitoring & Security Commands:"
+	@echo "  make menu        - Launch interactive Master Control Center (Default)"
 	@echo "  make wizard      - Run interactive configuration wizard (Step 0)"
 	@echo "  make scan        - Scan host for pre-existing services & port conflicts"
 	@echo "  make add-site    - Auto-generate Nginx proxy config for your custom service"
@@ -31,6 +37,7 @@ scale-node:
 
 wizard:
 	python3 scripts/wizard.py
+
 
 
 
