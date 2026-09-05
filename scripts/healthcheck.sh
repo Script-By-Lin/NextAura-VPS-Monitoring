@@ -29,17 +29,33 @@ check_endpoint() {
     fi
 }
 
+# Source environment variables if .env exists
+if [ -f .env ]; then
+    set -a
+    . .env
+    set +a
+fi
+
+PROM_P="${PROMETHEUS_PORT:-9090}"
+GRAF_P="${GRAFANA_PORT:-3000}"
+AM_P="${ALERTMANAGER_PORT:-9093}"
+LOKI_P="${LOKI_PORT:-3100}"
+TEMPO_P="${TEMPO_PORT:-3200}"
+API_P="${FASTAPI_PORT:-8000}"
+NODE_P="${NODE_EXPORTER_PORT:-9100}"
+BBOX_P="${BLACKBOX_PORT:-9115}"
+
 echo -e "\n${YELLOW}1. Probing Service Health Endpoints:${NC}"
-check_endpoint "Prometheus" "http://localhost:9090/-/healthy" 200
-check_endpoint "Grafana" "http://localhost:3000/api/health" 200
-check_endpoint "Alertmanager" "http://localhost:9093/-/healthy" 200
-check_endpoint "Loki" "http://localhost:3100/ready" 200
-check_endpoint "Tempo" "http://localhost:3200/ready" 200
-check_endpoint "FastAPI Liveness" "http://localhost:8000/health/live" 200
-check_endpoint "FastAPI Readiness" "http://localhost:8000/health/ready" 200
-check_endpoint "FastAPI Metrics" "http://localhost:8000/metrics" 200
-check_endpoint "Node Exporter" "http://localhost:9100/metrics" 200
-check_endpoint "Blackbox Exporter" "http://localhost:9115" 200
+check_endpoint "Prometheus" "http://localhost:${PROM_P}/-/healthy" 200
+check_endpoint "Grafana" "http://localhost:${GRAF_P}/api/health" 200
+check_endpoint "Alertmanager" "http://localhost:${AM_P}/-/healthy" 200
+check_endpoint "Loki" "http://localhost:${LOKI_P}/ready" 200
+check_endpoint "Tempo" "http://localhost:${TEMPO_P}/ready" 200
+check_endpoint "FastAPI Liveness" "http://localhost:${API_P}/health/live" 200
+check_endpoint "FastAPI Readiness" "http://localhost:${API_P}/health/ready" 200
+check_endpoint "FastAPI Metrics" "http://localhost:${API_P}/metrics" 200
+check_endpoint "Node Exporter" "http://localhost:${NODE_P}/metrics" 200
+check_endpoint "Blackbox Exporter" "http://localhost:${BBOX_P}" 200
 
 echo -e "\n${YELLOW}2. Checking Prometheus Scrape Target Statuses:${NC}"
 if command -v jq &> /dev/null; then

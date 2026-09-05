@@ -77,22 +77,33 @@ def show_urls():
     print(f"{BOLD}🔗 NEXTAURA SERVICE ACCESS URLS & CREDENTIALS{NC}")
     print("=" * 70)
     
-    # Read password from .env if present
-    grafana_pass = "admin_secure_pass_change_me"
+    # Read ports and password from .env if present
+    env_vars = {
+        "GRAFANA_ADMIN_PASSWORD": "admin_secure_pass_change_me",
+        "GRAFANA_PORT": "3000",
+        "FASTAPI_PORT": "8000",
+        "PROMETHEUS_PORT": "9090",
+        "ALERTMANAGER_PORT": "9093",
+        "LOKI_PORT": "3100",
+        "TEMPO_PORT": "3200",
+        "NGINX_HTTP_PORT": "80",
+    }
     if os.path.exists(".env"):
         with open(".env", "r") as f:
             for line in f:
-                if line.startswith("GRAFANA_ADMIN_PASSWORD="):
-                    grafana_pass = line.strip().split("=", 1)[1].strip()
+                for k in env_vars.keys():
+                    if line.startswith(f"{k}="):
+                        env_vars[k] = line.strip().split("=", 1)[1].strip()
 
-    print(f"• {BOLD}Grafana Dashboards:{NC}       {CYAN}http://localhost:3000{NC} (User: admin / Pass: {grafana_pass})")
-    print(f"• {BOLD}FastAPI Application:{NC}      {CYAN}http://localhost:8000{NC}")
-    print(f"• {BOLD}FastAPI Swagger Docs:{NC}     {CYAN}http://localhost:8000/docs{NC}")
-    print(f"• {BOLD}Prometheus Metrics:{NC}       {CYAN}http://localhost:9090{NC}")
-    print(f"• {BOLD}Alertmanager UI:{NC}          {CYAN}http://localhost:9093{NC}")
-    print(f"• {BOLD}Loki Log Ingestion:{NC}       {CYAN}http://localhost:3100{NC}")
-    print(f"• {BOLD}Tempo Distributed Traces:{NC} {CYAN}http://localhost:3200{NC}")
-    print(f"• {BOLD}Nginx Reverse Proxy:{NC}      {CYAN}http://localhost:80{NC}")
+    grafana_pass = env_vars["GRAFANA_ADMIN_PASSWORD"]
+    print(f"• {BOLD}Grafana Dashboards:{NC}       {CYAN}http://localhost:{env_vars['GRAFANA_PORT']}{NC} (User: admin / Pass: {grafana_pass})")
+    print(f"• {BOLD}FastAPI Application:{NC}      {CYAN}http://localhost:{env_vars['FASTAPI_PORT']}{NC}")
+    print(f"• {BOLD}FastAPI Swagger Docs:{NC}     {CYAN}http://localhost:{env_vars['FASTAPI_PORT']}/docs{NC}")
+    print(f"• {BOLD}Prometheus Metrics:{NC}       {CYAN}http://localhost:{env_vars['PROMETHEUS_PORT']}{NC}")
+    print(f"• {BOLD}Alertmanager UI:{NC}          {CYAN}http://localhost:{env_vars['ALERTMANAGER_PORT']}{NC}")
+    print(f"• {BOLD}Loki Log Ingestion:{NC}       {CYAN}http://localhost:{env_vars['LOKI_PORT']}{NC}")
+    print(f"• {BOLD}Tempo Distributed Traces:{NC} {CYAN}http://localhost:{env_vars['TEMPO_PORT']}{NC}")
+    print(f"• {BOLD}Nginx Reverse Proxy:{NC}      {CYAN}http://localhost:{env_vars['NGINX_HTTP_PORT']}{NC}")
     print("=" * 70)
 
 def run_command(cmd_list, wait=True):

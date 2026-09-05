@@ -536,6 +536,68 @@ def interactive_service_resolver(services: List[ServiceInfo], nginx_info: Option
 
     return resolutions
 
+def find_first_available_port(start_port: int, occupied_ports: set, max_tries: int = 100) -> int:
+    """Finds the first available TCP port that is neither in occupied_ports nor listening on host."""
+    for p in range(start_port, start_port + max_tries):
+        if p in occupied_ports:
+            continue
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.1)
+                res = s.connect_ex(("127.0.0.1", p))
+                if res != 0:
+                    return p
+        except Exception:
+            return p
+    return start_port
+
+def auto_resolve_all_port_conflicts(services: List[ServiceInfo]) -> Dict[str, str]:
+    """Automatically detects host port collisions and reassigns verified open ports."""
+    resolutions = {}
+    occupied_ports = {s.port for s in services if not s.container_name.startswith("vps-")}
+    
+    port_definitions = [
+        ("GRAFANA_PORT", 3000, 3001, "Grafana Dashboards"),
+        ("FASTAPI_PORT", 8000, 8001, "FastAPI APM Service"),
+        ("PROMETHEUS_PORT", 9090, 9091, "Prometheus Engine"),
+        ("ALERTMANAGER_PORT", 9093, 9094, "Alertmanager"),
+        ("LOKI_PORT", 3100, 3101, "Loki Log Engine"),
+        ("TEMPO_PORT", 3200, 3201, "Tempo Trace Engine"),
+        ("NGINX_HTTP_PORT", 80, 8088, "Nginx HTTP Proxy"),
+        ("NGINX_HTTPS_PORT", 443, 8443, "Nginx HTTPS Proxy"),
+        ("CADVISOR_PORT", 8080, 8085, "cAdvisor Container Metrics"),
+        ("NODE_EXPORTER_PORT", 9100, 9101, "Node Exporter"),
+        ("BLACKBOX_PORT", 9115, 9116, "Blackbox Synthetic Prober"),
+        ("OTEL_GRPC_PORT", 4317, 4327, "OpenTelemetry gRPC"),
+        ("OTEL_HTTP_PORT", 4318, 4328, "OpenTelemetry HTTP"),
+    ]
+
+    adjusted = []
+    for env_var, default_port, fallback_start, svc_title in port_definitions:
+        if default_port in occupied_ports:
+            svc_info = next((s for s in services if s.port == default_port), None)
+            proc_desc = svc_info.process_name if svc_info else "Host Process"
+            
+            # Find next free port
+            open_port = find_first_available_port(fallback_start, occupied_ports)
+            occupied_ports.add(open_port)
+            resolutions[env_var] = str(open_port)
+            adjusted.append((svc_title, default_port, proc_desc, open_port, env_var))
+
+    if adjusted:
+        print("\n" + "=" * 80)
+        print(f"{BOLD}🔄 AUTOMATIC PORT ADJUSTMENTS (PORT COLLISIONS PREVENTED){NC}")
+        print("=" * 80)
+        print(f"NextAura detected existing host services on standard ports.")
+        print(f"Automatically assigned verified {GREEN}OPEN{NC} ports in {CYAN}.env{NC}:\n")
+        print(f"{'SERVICE':<26} {'DEFAULT':<10} {'OCCUPIED BY':<22} {'ASSIGNED OPEN PORT':<20}")
+        print("-" * 80)
+        for svc_title, def_port, proc, open_p, env_var in adjusted:
+            print(f"{svc_title:<26} :{def_port:<9} {YELLOW}{proc:<22}{NC} {GREEN}:{open_p} ({env_var}){NC}")
+        print("=" * 80 + "\n")
+
+    return resolutions
+
 def apply_resolutions_to_env(resolutions: Dict[str, str], env_file: str = ".env"):
     """Updates .env with discovered resolutions."""
     if not resolutions:
@@ -571,7 +633,7 @@ def apply_resolutions_to_env(resolutions: Dict[str, str], env_file: str = ".env"
     with open(env_file, "w") as f:
         f.writelines(new_lines)
 
-    print(f"\n{GREEN}✅ Applied discovered configuration options to {env_file}:{NC}")
+    print(f"\n{GREEN}✅ Applied port & configuration options to {env_file}:{NC}")
     for k, v in resolutions.items():
         print(f"  • {k}={v}")
 
@@ -586,14 +648,22 @@ def run_scan_workflow(interactive: bool = True):
     print_nginx_inspection_report(nginx_info, services)
     print_discovery_table(services)
 
+    # 1. Automatic port conflict resolution
+    auto_resolutions = auto_resolve_all_port_conflicts(services)
+    if auto_resolutions:
+        apply_resolutions_to_env(auto_resolutions)
+
+    # 2. Interactive options (if interactive)
     if interactive:
         resolutions = interactive_service_resolver(services, nginx_info)
         if resolutions:
             apply_resolutions_to_env(resolutions)
+            
     return services
 
 if __name__ == "__main__":
     run_scan_workflow(interactive=True)
+
 
 
 
