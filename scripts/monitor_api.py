@@ -12,7 +12,7 @@ import urllib.request
 import urllib.parse
 import time
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 GREEN = "\033[0;32m"
 CYAN = "\033[0;36m"
@@ -43,7 +43,7 @@ def prompt_yes_no(question: str, default: bool = True) -> bool:
         return default
     return val in ("y", "yes")
 
-def test_endpoint(url: str) -> (bool, str, float):
+def test_endpoint(url: str) -> Tuple[bool, str, float]:
     """Probes the user's API endpoint to verify connectivity."""
     start = time.time()
     try:
