@@ -57,16 +57,17 @@ def print_menu():
     print(f" {CYAN}[3]{NC}  🔄 Restart All Services                 (`make restart`)")
     print(f" {CYAN}[4]{NC}  🔍 Scan Host Ports, Services & Nginx    (`make scan`)")
     print(f" {CYAN}[5]{NC}  🌐 Add Custom App / Website to Nginx    (`make add-site`)")
-    print(f" {CYAN}[6]{NC}  📲 Configure 1-Step Telegram Alerts     (`make telegram`)")
-    print(f" {CYAN}[7]{NC}  🌐 Onboard Remote VPS Node via SSH      (`make scale-node`)")
-    print(f" {CYAN}[8]{NC}  🩺 Run End-to-End Health Diagnostics    (`make healthcheck`)")
-    print(f" {CYAN}[9]{NC}  🧪 Run Synthetic Traffic Benchmark      (`make test-load`)")
-    print(f" {CYAN}[10]{NC} 🚨 Dispatch Test Alert to Telegram     (`make test-alert`)")
-    print(f" {CYAN}[11]{NC} 🛡️ Apply UFW Firewall & Security        (`bash scripts/security_hardening.sh`)")
-    print(f" {CYAN}[12]{NC} 📜 Stream Live Container Logs           (`make logs`)")
-    print(f" {CYAN}[13]{NC} 🔗 Show All Service URLs & Passwords")
-    print(f" {CYAN}[14]{NC} 🪄 Re-run Full Interactive Setup Wizard (`make wizard`)")
-    print(f" {CYAN}[15]{NC} 📦 Auto-Detect OS & Install Prerequisites (`make prereqs`)")
+    print(f" {CYAN}[6]{NC}  🌐 Monitor Existing API / Domain        (`make monitor-api`)")
+    print(f" {CYAN}[7]{NC}  📲 Configure 1-Step Telegram Alerts     (`make telegram`)")
+    print(f" {CYAN}[8]{NC}  🌐 Onboard Remote VPS Node via SSH      (`make scale-node`)")
+    print(f" {CYAN}[9]{NC}  🩺 Run End-to-End Health Diagnostics    (`make healthcheck`)")
+    print(f" {CYAN}[10]{NC} 🧪 Run Synthetic Traffic Benchmark      (`make test-load`)")
+    print(f" {CYAN}[11]{NC} 🚨 Dispatch Test Alert to Telegram     (`make test-alert`)")
+    print(f" {CYAN}[12]{NC} 🛡️ Apply UFW Firewall & Security        (`bash scripts/security_hardening.sh`)")
+    print(f" {CYAN}[13]{NC} 📜 Stream Live Container Logs           (`make logs`)")
+    print(f" {CYAN}[14]{NC} 🔗 Show All Service URLs & Passwords")
+    print(f" {CYAN}[15]{NC} 🪄 Re-run Full Interactive Setup Wizard (`make wizard`)")
+    print(f" {CYAN}[16]{NC} 📦 Auto-Detect OS & Install Prerequisites (`make prereqs`)")
     print("=" * 70)
     print(f" {RED}[0]{NC}  🚪 Exit Control Center")
     print("=" * 70)
@@ -105,7 +106,7 @@ def run_command(cmd_list, wait=True):
 def main():
     while True:
         print_menu()
-        choice = input(f"\n{BOLD}Select an option [0-15]: {NC}").strip()
+        choice = input(f"\n{BOLD}Select an option [0-16]: {NC}").strip()
 
         if choice == "0":
             print(f"\n{GREEN}Goodbye! NextAura monitoring remains active in background.{NC}\n")
@@ -124,31 +125,33 @@ def main():
         elif choice == "5":
             run_command(["python3", "scripts/nginx_site_generator.py"])
         elif choice == "6":
-            run_command(["python3", "scripts/telegram_setup.py"])
+            run_command(["python3", "scripts/monitor_api.py"])
         elif choice == "7":
-            run_command(["python3", "scripts/scale_node.py"])
+            run_command(["python3", "scripts/telegram_setup.py"])
         elif choice == "8":
-            run_command(["bash", "scripts/healthcheck.sh"])
+            run_command(["python3", "scripts/scale_node.py"])
         elif choice == "9":
+            run_command(["bash", "scripts/healthcheck.sh"])
+        elif choice == "10":
             duration = input("\nEnter load duration in seconds [20]: ").strip() or "20"
             rate = input("Enter concurrent workers [10]: ").strip() or "10"
             run_command(["python3", "scripts/load_test.py", "--duration", duration, "--rate", rate, "--simulate-attacks"])
-        elif choice == "10":
-            run_command(["bash", "scripts/test_alert.sh"])
         elif choice == "11":
-            run_command(["bash", "scripts/security_hardening.sh"])
+            run_command(["bash", "scripts/test_alert.sh"])
         elif choice == "12":
+            run_command(["bash", "scripts/security_hardening.sh"])
+        elif choice == "13":
             print(f"\n{YELLOW}Streaming logs (Press Ctrl+C to stop)...{NC}")
             run_command(["docker-compose", "logs", "-f", "--tail=50"], wait=True)
-        elif choice == "13":
+        elif choice == "14":
             show_urls()
             input(f"\n{YELLOW}Press Enter to return to menu...{NC}")
-        elif choice == "14":
-            run_command(["python3", "scripts/wizard.py"])
         elif choice == "15":
+            run_command(["python3", "scripts/wizard.py"])
+        elif choice == "16":
             run_command(["bash", "scripts/install_prereqs.sh"])
         else:
-            print(f"{RED}Invalid selection. Please enter a number between 0 and 15.{NC}")
+            print(f"{RED}Invalid selection. Please enter a number between 0 and 16.{NC}")
             time.sleep(1)
 
 if __name__ == "__main__":

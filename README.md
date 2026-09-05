@@ -68,6 +68,7 @@ flowchart TD
 | **`make menu`** | `python3 scripts/control_center.py` | **Master Control Center**: All-in-one interactive menu to manage, scan, scale, test, and monitor. |
 | **`make wizard`** | `python3 scripts/wizard.py` | **Interactive Setup Wizard**: Guided questionnaire to scan ports, configure Telegram, VPS specs, and deploy. |
 | **`make scan`** | `python3 scripts/scanner.py` | **Host Discovery Scanner**: Detects pre-existing Nginx, running sites, open ports, and databases. |
+| **`make monitor-api`** | `python3 scripts/monitor_api.py` | **Zero-Touch API Monitor**: Monitors existing API domains & metrics without touching your configs. |
 | **`make add-site`** | `python3 scripts/nginx_site_generator.py` | **Custom Nginx Site**: Auto-generates Nginx reverse proxy configs for your custom frontend/backend apps. |
 | **`make telegram`** | `python3 scripts/telegram_setup.py` | **1-Step Telegram Setup**: Auto-detects Chat ID from Bot Token and configures Alertmanager. |
 | **`make scale-node`**| `python3 scripts/scale_node.py` | **Remote VPS Scaling**: Connects via SSH to remote VPS and registers it for multi-node monitoring. |

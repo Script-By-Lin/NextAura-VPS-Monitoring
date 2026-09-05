@@ -28,6 +28,11 @@ try:
 except ImportError:
     telegram_setup = None
 
+try:
+    import monitor_api
+except ImportError:
+    monitor_api = None
+
 
 
 
@@ -112,6 +117,14 @@ def main():
     create_site = prompt_yes_no("Do you want to configure Nginx to reverse-proxy your own custom service/website (Node, Python, Go, PHP, SPA)?", default=False)
     if create_site and nginx_site_generator:
         nginx_site_generator.interactive_site_creator()
+
+    # --------------------------------------------------------------------------
+    # 0.3 ZERO-TOUCH EXISTING API / DOMAIN MONITORING
+    # --------------------------------------------------------------------------
+    print_header("Step 0.3: Existing API / Domain Monitoring (Zero-Touch Read-Only)")
+    mon_api = prompt_yes_no("Do you have an existing API with its own domain/config that you want to monitor (without touching its config)?", default=False)
+    if mon_api and monitor_api:
+        monitor_api.interactive_monitor_api_wizard()
 
     # --------------------------------------------------------------------------
     # 1. ENVIRONMENT & SPECS

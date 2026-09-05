@@ -1,4 +1,4 @@
-.PHONY: default menu help install prereqs setup up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
+.PHONY: default menu help install prereqs setup up down restart status logs healthcheck test-load test-alert clean wizard scan add-site monitor-api telegram scale-node
 
 default: menu
 
@@ -12,6 +12,7 @@ help:
 	@echo "  make menu        - Launch interactive Master Control Center (Default)"
 	@echo "  make wizard      - Run interactive configuration wizard (Step 0)"
 	@echo "  make scan        - Scan host for pre-existing services & port conflicts"
+	@echo "  make monitor-api - Monitor existing API/domain (Zero-Touch Read-Only Mode)"
 	@echo "  make add-site    - Auto-generate Nginx proxy config for your custom service"
 	@echo "  make telegram    - 1-Step Telegram alert setup (Token only from @BotFather)"
 	@echo "  make scale-node  - Onboard a remote VPS worker node via SSH"
@@ -36,6 +37,9 @@ setup:
 
 scan:
 	python3 scripts/scanner.py
+
+monitor-api:
+	python3 scripts/monitor_api.py
 
 add-site:
 	python3 scripts/nginx_site_generator.py
