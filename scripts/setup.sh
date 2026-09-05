@@ -26,26 +26,17 @@ echo -e "${CYAN}  🚀 Deploying NextAura VPS Observability & Security Stack    
 echo -e "${CYAN}================================================================${NC}"
 
 
-# 1. Check & Auto-Install Prerequisites (Docker, Compose)
-echo -e "\n${YELLOW}[1/6] Checking system prerequisites (Docker, Docker Compose)...${NC}"
-if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}Docker not found. Installing Docker automatically via official script...${NC}"
-    if [ "$EUID" -eq 0 ]; then
+# 1. Check & Auto-Install Prerequisites (Docker, Compose, Python3, Git, etc.)
+echo -e "\n${YELLOW}[1/6] Auto-detecting OS & verifying system prerequisites...${NC}"
+if [ -f scripts/install_prereqs.sh ]; then
+    bash scripts/install_prereqs.sh
+else
+    if ! command -v docker &> /dev/null; then
+        echo -e "${YELLOW}Installing Docker...${NC}"
         curl -fsSL https://get.docker.com | sh
-        systemctl enable --now docker || service docker start || true
-    else
-        echo -e "${RED}Please run: 'curl -fsSL https://get.docker.com | sudo sh' or run setup with sudo.${NC}"
-        exit 1
     fi
 fi
-
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo -e "${YELLOW}Installing Docker Compose plugin...${NC}"
-    if [ "$EUID" -eq 0 ]; then
-        apt-get update && apt-get install -y docker-compose-plugin 2>/dev/null || true
-    fi
-fi
-echo -e "${GREEN}✓ Docker & Docker Compose engine ready.${NC}"
+echo -e "${GREEN}✓ System prerequisites & Docker runtime verified.${NC}"
 
 
 # 2. Prepare Environment File & Service Discovery Scan

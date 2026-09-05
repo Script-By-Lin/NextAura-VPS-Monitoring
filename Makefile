@@ -1,4 +1,4 @@
-.PHONY: default menu help up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
+.PHONY: default menu help install prereqs setup up down restart status logs healthcheck test-load test-alert clean wizard scan add-site telegram scale-node
 
 default: menu
 
@@ -7,6 +7,8 @@ menu:
 
 help:
 	@echo "NextAura VPS Monitoring & Security Commands:"
+	@echo "  make install     - 1-Click OS detection, prereqs, port scan, deploy & menu"
+	@echo "  make prereqs     - Auto-detect OS & install Docker, Compose, Python3, Git, etc."
 	@echo "  make menu        - Launch interactive Master Control Center (Default)"
 	@echo "  make wizard      - Run interactive configuration wizard (Step 0)"
 	@echo "  make scan        - Scan host for pre-existing services & port conflicts"
@@ -22,6 +24,15 @@ help:
 	@echo "  make test-load   - Run synthetic traffic load test"
 	@echo "  make test-alert  - Trigger a test alert to Alertmanager & Telegram"
 	@echo "  make clean       - Stop stack and remove volumes"
+
+install:
+	bash install.sh
+
+prereqs:
+	bash scripts/install_prereqs.sh
+
+setup:
+	bash scripts/setup.sh
 
 scan:
 	python3 scripts/scanner.py

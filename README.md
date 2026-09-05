@@ -63,10 +63,14 @@ flowchart TD
 
 | Command | Underlying Script | Description & Purpose |
 | :--- | :--- | :--- |
+| **`make install`** | `bash install.sh` | **1-Click Universal Installer**: Auto-detects OS, installs Docker/Compose/Tools, scans ports, and launches. |
+| **`make prereqs`** | `bash scripts/install_prereqs.sh` | **OS & Dependency Engine**: Detects Linux Distro (Ubuntu, Debian, RHEL, Arch, Alpine, SUSE) & installs prerequisites. |
+| **`make menu`** | `python3 scripts/control_center.py` | **Master Control Center**: All-in-one interactive menu to manage, scan, scale, test, and monitor. |
 | **`make wizard`** | `python3 scripts/wizard.py` | **Interactive Setup Wizard**: Guided questionnaire to scan ports, configure Telegram, VPS specs, and deploy. |
 | **`make scan`** | `python3 scripts/scanner.py` | **Host Discovery Scanner**: Detects pre-existing Nginx, running sites, open ports, and databases. |
 | **`make add-site`** | `python3 scripts/nginx_site_generator.py` | **Custom Nginx Site**: Auto-generates Nginx reverse proxy configs for your custom frontend/backend apps. |
 | **`make telegram`** | `python3 scripts/telegram_setup.py` | **1-Step Telegram Setup**: Auto-detects Chat ID from Bot Token and configures Alertmanager. |
+| **`make scale-node`**| `python3 scripts/scale_node.py` | **Remote VPS Scaling**: Connects via SSH to remote VPS and registers it for multi-node monitoring. |
 | **`make up`** | `docker-compose up -d --build` | **Start Platform**: Builds and starts all 11 observability and security containers. |
 | **`make down`** | `docker-compose down` | **Stop Platform**: Gracefully shuts down all containers. |
 | **`make restart`** | `docker-compose restart` | **Restart Platform**: Restarts all services without rebuilding. |

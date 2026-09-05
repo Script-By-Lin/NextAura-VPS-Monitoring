@@ -85,17 +85,30 @@ def main():
 
 
     # --------------------------------------------------------------------------
-    # 0. SERVICE & PORT DISCOVERY SCANNER
+    # 0. OS DETECTION & SYSTEM PREREQUISITES
     # --------------------------------------------------------------------------
-    print_header("Step 0: Host Service & Port Discovery Scanner")
+    print_header("Step 0: OS Detection & System Prerequisites")
+    os_info = scanner.get_os_info() if scanner else {"name": "Linux", "arch": "x86_64"}
+    hw_info = scanner.get_system_hardware() if scanner else {"ram_gb": "8 GB", "cpu_cores": "4", "public_ip": "127.0.0.1"}
+    print(f"• Detected OS:       {os_info.get('name', 'Linux')} ({os_info.get('arch', 'x86_64')})")
+    print(f"• Detected Hardware: {hw_info.get('cpu_cores')} CPU Cores | {hw_info.get('ram_gb')} RAM | Public IP: {hw_info.get('public_ip')}")
+
+    install_deps = prompt_yes_no("Verify/Install system packages (Docker, Compose, Python3, Git, UFW, Fail2ban)?", default=False)
+    if install_deps and os.path.exists("scripts/install_prereqs.sh"):
+        subprocess.run(["bash", "scripts/install_prereqs.sh"])
+
+    # --------------------------------------------------------------------------
+    # 0.1 SERVICE & PORT DISCOVERY SCANNER
+    # --------------------------------------------------------------------------
+    print_header("Step 0.1: Host Service & Port Discovery Scanner")
     scan_now = prompt_yes_no("Scan host for pre-existing services (Nginx, databases, APIs, port conflicts)?", default=True)
     if scan_now and scanner:
         scanner.run_scan_workflow(interactive=True)
 
     # --------------------------------------------------------------------------
-    # 0.1 CUSTOM NGINX SERVICE GENERATOR
+    # 0.2 CUSTOM NGINX SERVICE GENERATOR
     # --------------------------------------------------------------------------
-    print_header("Step 0.1: Custom Application / Website Nginx Setup")
+    print_header("Step 0.2: Custom Application / Website Nginx Setup")
     create_site = prompt_yes_no("Do you want to configure Nginx to reverse-proxy your own custom service/website (Node, Python, Go, PHP, SPA)?", default=False)
     if create_site and nginx_site_generator:
         nginx_site_generator.interactive_site_creator()
@@ -105,19 +118,15 @@ def main():
     # --------------------------------------------------------------------------
     print_header("Step 1: Environment & Host Infrastructure")
 
-
     deployment_target = prompt_choice(
         "Select deployment target:",
         ["Single VPS (Production)", "Multi-VPS Cluster (Federated)", "Local Machine (Dev/Testing)", "Kubernetes"],
         default_idx=0
     )
-    host_os = prompt_choice(
-        "Host Operating System:",
-        ["Ubuntu / Debian", "Arch / CachyOS", "CentOS / RHEL", "Other Linux"],
-        default_idx=0
-    )
-    vps_ram = prompt_input("VPS RAM (e.g. 4GB, 8GB, 16GB)", default="8GB")
-    vps_cpu = prompt_input("VPS CPU Cores (e.g. 2, 4, 8)", default="4 Cores")
+    detected_ram_str = hw_info.get("ram_gb", "8GB").replace(" ", "")
+    detected_cpu_str = f"{hw_info.get('cpu_cores', '4')} Cores"
+    vps_ram = prompt_input("VPS RAM", default=detected_ram_str)
+    vps_cpu = prompt_input("VPS CPU Cores", default=detected_cpu_str)
 
     # --------------------------------------------------------------------------
     # 2. APPLICATION & TRAFFIC CONTEXT

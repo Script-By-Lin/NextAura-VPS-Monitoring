@@ -227,8 +227,8 @@ def print_nginx_inspection_report(nginx_info: Dict[str, any], services: List[Ser
     else:
         print(f"\n• Host Nginx Configs:   None (Clean host environment).")
 
-    print("=" * 80)
-
+def print_discovery_table(services: List[ServiceInfo]):
+    """Prints the service discovery table."""
     print("\n" + "=" * 80)
     print(f"{BOLD}🔍 HOST SERVICE & PORT DISCOVERY REPORT{NC}")
     print("=" * 80)
@@ -249,11 +249,85 @@ def print_nginx_inspection_report(nginx_info: Dict[str, any], services: List[Ser
         print(f"{s.port:<8} {status_str:<21} {s.category:<32} {proc_str:<26}{banner}")
     print("=" * 80 + "\n")
 
+def get_os_info() -> Dict[str, str]:
+    """Detects host operating system distribution and architecture."""
+    info = {"name": "Linux", "version": "", "id": "linux", "arch": os.uname().machine}
+    if os.path.exists("/etc/os-release"):
+        try:
+            with open("/etc/os-release", "r") as f:
+                for line in f:
+                    if line.startswith("PRETTY_NAME="):
+                        info["name"] = line.strip().split("=", 1)[1].replace('"', '')
+                    elif line.startswith("ID="):
+                        info["id"] = line.strip().split("=", 1)[1].replace('"', '')
+                    elif line.startswith("VERSION_ID="):
+                        info["version"] = line.strip().split("=", 1)[1].replace('"', '')
+        except Exception:
+            pass
+    return info
+
+def get_system_hardware() -> Dict[str, str]:
+    """Detects VPS RAM, CPU cores, disk space, and public IP."""
+    import platform
+    hw = {
+        "os": f"{platform.system()} {platform.release()}",
+        "cpu_cores": str(os.cpu_count() or 1),
+        "ram_gb": "Unknown",
+        "disk_free": "Unknown",
+        "public_ip": "127.0.0.1"
+    }
+
+    # RAM
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    gb = round(kb / (1024 * 1024), 1)
+                    hw["ram_gb"] = f"{gb} GB"
+                    break
+    except Exception:
+        pass
+
+    # Disk
+    try:
+        stat = os.statvfs("/")
+        free_gb = round((stat.f_bavail * stat.f_frsize) / (1024**3), 1)
+        total_gb = round((stat.f_blocks * stat.f_frsize) / (1024**3), 1)
+        hw["disk_free"] = f"{free_gb} GB free of {total_gb} GB"
+    except Exception:
+        pass
+
+    # Public IP
+    for url in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"]:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                ip = resp.read().decode("utf-8").strip()
+                if ip:
+                    hw["public_ip"] = ip
+                    break
+        except Exception:
+            continue
+
+    return hw
+
+def print_host_hardware_summary(os_info: Dict[str, str], hw: Dict[str, str]):
+    print("\n" + "=" * 80)
+    print(f"{BOLD}🖥️  VPS SYSTEM & HARDWARE SPECIFICATIONS{NC}")
+    print("=" * 80)
+    print(f"• Operating System: {CYAN}{os_info.get('name', 'Linux')} ({os_info.get('arch', 'x86_64')}){NC}")
+    print(f"• CPU Cores:        {CYAN}{hw.get('cpu_cores')} Cores{NC}")
+    print(f"• Total Memory:     {CYAN}{hw.get('ram_gb')}{NC}")
+    print(f"• Root Storage:     {CYAN}{hw.get('disk_free')}{NC}")
+    print(f"• Detected Public IP: {GREEN}{hw.get('public_ip')}{NC}")
+    print("=" * 80)
+
 def generate_host_nginx_snippet(grafana_port: int = 3000, fastapi_port: int = 8000) -> str:
     """Generates an Nginx server/location configuration snippet for host Nginx."""
     return f"""# ==============================================================================
-# Observability Platform Reverse Proxy Snippet for Existing Host Nginx
-# Place this in /etc/nginx/conf.d/observability.conf or include in your server block
+# NextAura Observability Reverse Proxy Snippet for Existing Host Nginx
+# Place this in /etc/nginx/conf.d/nextaura.conf or include in your server block
 # ==============================================================================
 
 # 1. Grafana Monitoring UI
@@ -290,7 +364,6 @@ location /health/ {{
 def interactive_service_resolver(services: List[ServiceInfo]) -> Dict[str, str]:
     """Prompts the user with tailored integration options based on discovered services."""
     resolutions = {}
-    
     ports_map = {s.port: s for s in services}
     non_stack_services = [s for s in services if not s.container_name.startswith("vps-")]
 
@@ -299,7 +372,7 @@ def interactive_service_resolver(services: List[ServiceInfo]) -> Dict[str, str]:
         return resolutions
 
     print(f"\n{BOLD}🎯 Discovered Pre-Existing Services on Host:{NC}")
-    print("Let's configure how the Observability platform should interact with them:\n")
+    print("Let's configure how NextAura should interact with them:\n")
 
     # 1. Check for Pre-existing Nginx / Port 80 / 443
     if 80 in ports_map or 443 in ports_map:
@@ -398,6 +471,10 @@ def apply_resolutions_to_env(resolutions: Dict[str, str], env_file: str = ".env"
         print(f"  • {k}={v}")
 
 def run_scan_workflow(interactive: bool = True):
+    os_info = get_os_info()
+    hw = get_system_hardware()
+    print_host_hardware_summary(os_info, hw)
+
     print("\n🔍 Scanning host listening ports, running services, and Nginx configurations...")
     services = scan_listening_ports()
     nginx_info = scan_host_nginx_configs()
@@ -412,4 +489,6 @@ def run_scan_workflow(interactive: bool = True):
 
 if __name__ == "__main__":
     run_scan_workflow(interactive=True)
+
+
 

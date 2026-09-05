@@ -66,6 +66,7 @@ def print_menu():
     print(f" {CYAN}[12]{NC} 📜 Stream Live Container Logs           (`make logs`)")
     print(f" {CYAN}[13]{NC} 🔗 Show All Service URLs & Passwords")
     print(f" {CYAN}[14]{NC} 🪄 Re-run Full Interactive Setup Wizard (`make wizard`)")
+    print(f" {CYAN}[15]{NC} 📦 Auto-Detect OS & Install Prerequisites (`make prereqs`)")
     print("=" * 70)
     print(f" {RED}[0]{NC}  🚪 Exit Control Center")
     print("=" * 70)
@@ -104,7 +105,7 @@ def run_command(cmd_list, wait=True):
 def main():
     while True:
         print_menu()
-        choice = input(f"\n{BOLD}Select an option [0-14]: {NC}").strip()
+        choice = input(f"\n{BOLD}Select an option [0-15]: {NC}").strip()
 
         if choice == "0":
             print(f"\n{GREEN}Goodbye! NextAura monitoring remains active in background.{NC}\n")
@@ -144,8 +145,10 @@ def main():
             input(f"\n{YELLOW}Press Enter to return to menu...{NC}")
         elif choice == "14":
             run_command(["python3", "scripts/wizard.py"])
+        elif choice == "15":
+            run_command(["bash", "scripts/install_prereqs.sh"])
         else:
-            print(f"{RED}Invalid selection. Please enter a number between 0 and 14.{NC}")
+            print(f"{RED}Invalid selection. Please enter a number between 0 and 15.{NC}")
             time.sleep(1)
 
 if __name__ == "__main__":
