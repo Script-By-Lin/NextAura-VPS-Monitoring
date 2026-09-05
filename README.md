@@ -71,7 +71,8 @@ flowchart TD
 | **`make monitor-api`** | `python3 scripts/monitor_api.py` | **Zero-Touch API Monitor**: Monitors existing API domains & metrics without touching your configs. |
 | **`make add-site`** | `python3 scripts/nginx_site_generator.py` | **Custom Nginx Site**: Auto-generates Nginx reverse proxy configs for your custom frontend/backend apps. |
 | **`make telegram`** | `python3 scripts/telegram_setup.py` | **1-Step Telegram Setup**: Auto-detects Chat ID from Bot Token and configures Alertmanager. |
-| **`make scale-node`**| `python3 scripts/scale_node.py` | **Remote VPS Scaling**: Connects via SSH to remote VPS and registers it for multi-node monitoring. |
+| **`make clean-disk`** | `bash scripts/auto_cleaner.sh` | **Automated Disk Cleaner**: Prunes 30-day expired TSDB blocks, log archives, Docker dangling layers, and journals. |
+| **`make enable-autoclean`** | `bash scripts/auto_cleaner.sh --install-cron` | **Enable Daily Cron**: Installs automated daily 3:00 AM disk cleanup and maintenance cron job. |
 | **`make up`** | `docker-compose up -d --build` | **Start Platform**: Builds and starts all 11 observability and security containers. |
 | **`make down`** | `docker-compose down` | **Stop Platform**: Gracefully shuts down all containers. |
 | **`make restart`** | `docker-compose restart` | **Restart Platform**: Restarts all services without rebuilding. |
@@ -240,6 +241,19 @@ The table below shows the **empirical memory usage** measured live across all 11
 | **Grafana SQLite DB** | Persistent | **~30 MB – 80 MB** | Provisioned dashboards, user sessions, alert states. |
 | **Host Log Buffers** | Daily Rotation | **~50 MB – 200 MB** | Ephemeral buffer at `/tmp/vps_monitoring_logs`. |
 | **TOTAL RECOMMENDED STORAGE**| **Production 30-Day** | **5.0 GB – 10.0 GB Free Disk** | Safe operational buffer for months of continuous telemetry. |
+
+#### 🧹 Automated 30-Day Production Disk Cleaner
+To guarantee that your VPS never runs out of disk space during long-term production runs, NextAura includes an automated maintenance engine (`scripts/auto_cleaner.sh`):
+- **TSDB Tombstone Purge**: Calls Prometheus TSDB admin API to permanently purge deleted blocks.
+- **Log Buffer Pruning**: Purges ephemeral logs in `/tmp/vps_monitoring_logs` and `/var/log` older than 30 days.
+- **Docker Cache Pruning**: Removes dangling container layers, unused build caches, and old images (`docker image prune -f`).
+- **System Journal Vacuum**: Vacuums Linux systemd journals older than 30 days (`journalctl --vacuum-time=30d`).
+- **Enable Daily Cron (Runs at 3:00 AM)**:
+  ```bash
+  make enable-autoclean
+  # Or run manually anytime:
+  make clean-disk
+  ```
 
 ---
 

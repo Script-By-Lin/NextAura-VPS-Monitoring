@@ -47,13 +47,18 @@ if command -v python3 &> /dev/null && [ -f "scripts/scanner.py" ]; then
     python3 scripts/scanner.py
 fi
 
-# STEP 3: Setup Required Host Directories
-echo -e "\n[STEP 3/6] Setting up runtime storage directories & volume permissions..."
+# STEP 3: Setup Required Host Directories & Auto-Cleaner Cron
+echo -e "\n[STEP 3/6] Setting up runtime storage directories, volume permissions & 30-day auto-cleaner..."
 mkdir -p /tmp/vps_monitoring_logs/fastapi
 mkdir -p /tmp/vps_monitoring_logs/nginx
 mkdir -p configs/alertmanager/templates
 chmod 777 /tmp/vps_monitoring_logs/fastapi /tmp/vps_monitoring_logs/nginx 2>/dev/null || true
-echo "✓ Volume paths and log buffers initialized."
+
+# Install Automated 30-Day Storage & Disk Cleanup Service
+if [ -f "scripts/auto_cleaner.sh" ]; then
+    bash scripts/auto_cleaner.sh --install-cron 2>/dev/null || true
+fi
+echo "✓ Volume paths, log buffers, and 30-day auto-cleaner service initialized."
 
 # STEP 4: Build & Deploy Container Stack
 echo -e "\n[STEP 4/6] Building & Launching Observability Microservices..."

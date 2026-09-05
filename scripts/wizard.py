@@ -195,6 +195,14 @@ def main():
     f2b_whitelist = prompt_input("IP Whitelist (space-separated)", default="127.0.0.1/8 ::1 172.28.0.0/16")
 
     # --------------------------------------------------------------------------
+    # 4.1 AUTOMATED DISK CLEANER & STORAGE MAINTENANCE
+    # --------------------------------------------------------------------------
+    print_header("Step 4.1: Automated 30-Day Disk Cleanup & Maintenance")
+    enable_autoclean = prompt_yes_no("Enable automated daily 30-day disk cleanup & Docker/TSDB pruning cron job?", default=True)
+    if enable_autoclean and os.path.exists("scripts/auto_cleaner.sh"):
+        subprocess.run(["bash", "scripts/auto_cleaner.sh", "--install-cron"])
+
+    # --------------------------------------------------------------------------
     # 5. CREDENTIALS & DEPLOYMENT STYLE
     # --------------------------------------------------------------------------
     print_header("Step 5: Credentials & Orchestration")
