@@ -14,7 +14,7 @@ import getpass
 import re
 import urllib.request
 import json
-from typing import Optional
+from typing import Tuple, Optional
 
 GREEN = "\033[0;32m"
 CYAN = "\033[0;36m"
