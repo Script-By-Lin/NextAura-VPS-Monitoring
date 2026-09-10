@@ -50,7 +50,7 @@ check_endpoint "Prometheus" "http://localhost:${PROM_P}/-/healthy" 200
 check_endpoint "Grafana" "http://localhost:${GRAF_P}/api/health" 200
 check_endpoint "Alertmanager" "http://localhost:${AM_P}/-/healthy" 200
 check_endpoint "Loki" "http://localhost:${LOKI_P}/ready" 200
-check_endpoint "Tempo" "http://localhost:${TEMPO_P}/ready" 200
+check_endpoint "Tempo" "http://localhost:${TEMPO_P}/status" 200
 check_endpoint "FastAPI Liveness" "http://localhost:${API_P}/health/live" 200
 check_endpoint "FastAPI Readiness" "http://localhost:${API_P}/health/ready" 200
 check_endpoint "FastAPI Metrics" "http://localhost:${API_P}/metrics" 200

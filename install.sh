@@ -16,7 +16,7 @@ cat << 'EOF'
  / /|  /  __/>  </ /_/ ___ / /_/ / /  / /_/ / 
 /_/ |_/\___/_/|_|\__/_/  |_\__,_/_/   \__,_/  
 
-      ⚡ VPS OBSERVABILITY & SECURITY PLATFORM ⚡
+      ⚡ VPS OBSERVABILITY & NGINX PLATFORM ⚡
 EOF
 
 echo "================================================================"
@@ -25,6 +25,12 @@ echo "================================================================"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+# Ensure aura executable permissions
+chmod +x ./aura 2>/dev/null || true
+if [ "$EUID" -eq 0 ] || sudo -n true 2>/dev/null; then
+    sudo ln -sf "$SCRIPT_DIR/aura" /usr/local/bin/aura 2>/dev/null || true
+fi
 
 # STEP 1: Detect OS and Install Prerequisite Dependencies
 echo -e "\n[STEP 1/6] Detecting OS & Installing Platform Dependencies..."
@@ -96,9 +102,7 @@ echo -e "📜 Loki Logs:                http://localhost:${LOKI_PORT:-3100}"
 echo -e "⏱️  Tempo Traces:             http://localhost:${TEMPO_PORT:-3200}"
 echo -e "🌐 Nginx Reverse Proxy:      http://localhost:${NGINX_HTTP_PORT:-80}"
 echo -e "================================================================"
-echo -e "\n💡 Tip: To manage your platform anytime, simply run: make or make menu\n"
+echo -e "\n💡 Tip: To manage your platform anytime, simply run: ./aura or ./aura view\n"
 
 # Launch Interactive Control Center
-if command -v python3 &> /dev/null && [ -f "scripts/control_center.py" ]; then
-    python3 scripts/control_center.py
-fi
+./aura

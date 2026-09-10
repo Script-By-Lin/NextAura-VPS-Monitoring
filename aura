@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""
+NextAura VPS Monitoring & Nginx Automation Suite - Unified CLI (`aura`)
+Combines full-stack observability, host APM, proactive security, Nginx virtualhost
+orchestration, real-time views, and complete service teardown/purge capabilities.
+"""
+
+import sys
+import os
+import subprocess
+import argparse
+import time
+import json
+import urllib.request
+import re
+from typing import Optional, List, Dict
+
+# Ensure repository root is in sys.path
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+NGINX_ENGINE_PATH = os.path.join(REPO_ROOT, "nginx_engine")
+if NGINX_ENGINE_PATH not in sys.path:
+    sys.path.insert(0, NGINX_ENGINE_PATH)
+
+# Color constants
+GREEN = "\033[0;32m"
+CYAN = "\033[0;36m"
+YELLOW = "\033[1;33m"
+RED = "\033[0;31m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+NC = "\033[0m"
+
+BANNER = r"""
+    _   __          __  ___                  
+   / | / /__  _  __/ /_/   | __  ___________ _
+  /  |/ / _ \| |/_/ __/ /| |/ / / / ___/ __ `/
+ / /|  /  __/>  </ /_/ ___ / /_/ / /  / /_/ / 
+/_/ |_/\___/_/|_|\__/_/  |_\__,_/_/   \__,_/  
+
+      ⚡ VPS OBSERVABILITY & NGINX PLATFORM ⚡
+"""
+
+def get_compose_cmd() -> List[str]:
+    """Detects docker compose v2 vs legacy docker-compose."""
+    try:
+        if subprocess.call(["docker", "compose", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+            return ["docker", "compose"]
+    except Exception:
+        pass
+    return ["docker-compose"]
+
+def get_env_vars() -> Dict[str, str]:
+    """Reads environment variables from .env if present."""
+    env_vars = {
+        "GRAFANA_ADMIN_USER": "admin",
+        "GRAFANA_ADMIN_PASSWORD": "admin_secure_pass_change_me",
+        "GRAFANA_PORT": "3000",
+        "FASTAPI_PORT": "8000",
+        "PROMETHEUS_PORT": "9090",
+        "ALERTMANAGER_PORT": "9093",
+        "LOKI_PORT": "3100",
+        "TEMPO_PORT": "3200",
+        "NGINX_HTTP_PORT": "80",
+        "NGINX_HTTPS_PORT": "443",
+        "NODE_EXPORTER_PORT": "9100",
+        "CADVISOR_PORT": "8080",
+        "BLACKBOX_PORT": "9115",
+    }
+    env_file = os.path.join(REPO_ROOT, ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        env_vars[k.strip()] = v.strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return env_vars
+
+# ==============================================================================
+# SUBCOMMAND HANDLERS
+# ==============================================================================
+
+def cmd_menu(args: Optional[list] = None):
+    """Launches the Master Control Center interactive terminal menu."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "control_center.py")
+    subprocess.run([sys.executable, script_path])
+
+def cmd_up(args: Optional[list] = None):
+    """Starts and builds all 11 Docker observability containers."""
+    print(f"\n{GREEN}🚀 Starting NextAura Observability & Security Stack...{NC}")
+    cmd = get_compose_cmd() + ["up", "-d", "--build"]
+    res = subprocess.run(cmd, cwd=REPO_ROOT)
+    if res.returncode == 0:
+        print(f"\n{GREEN}✓ All services successfully launched in background.{NC}")
+        print(f"👉 Run {CYAN}./aura view{NC} or {CYAN}./aura status{NC} to inspect endpoints.")
+
+def cmd_down(args: Optional[list] = None):
+    """Gracefully stops all platform containers."""
+    print(f"\n{YELLOW}🛑 Stopping NextAura Observability Stack...{NC}")
+    cmd = get_compose_cmd() + ["down"]
+    subprocess.run(cmd, cwd=REPO_ROOT)
+    print(f"{GREEN}✓ Platform stopped.{NC}")
+
+def cmd_restart(args: Optional[list] = None):
+    """Restarts all observability microservices."""
+    print(f"\n{CYAN}🔄 Restarting NextAura containers...{NC}")
+    cmd = get_compose_cmd() + ["restart"]
+    subprocess.run(cmd, cwd=REPO_ROOT)
+    print(f"{GREEN}✓ All services restarted.{NC}")
+
+def cmd_status(args: Optional[list] = None):
+    """Displays container status, healthcheck results, and listening ports."""
+    print("\n" + "=" * 75)
+    print(f"{BOLD}📊 NEXTAURA CONTAINER RUNTIME STATUS{NC}")
+    print("=" * 75)
+    cmd = get_compose_cmd() + ["ps"]
+    subprocess.run(cmd, cwd=REPO_ROOT)
+    print("=" * 75)
+
+def cmd_logs(args: Optional[list] = None):
+    """Streams live container logs."""
+    cmd = get_compose_cmd() + ["logs", "-f", "--tail=100"]
+    if args:
+        cmd.extend(args)
+    try:
+        subprocess.run(cmd, cwd=REPO_ROOT)
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Log stream stopped.{NC}")
+
+def cmd_health(args: Optional[list] = None):
+    """Runs end-to-end diagnostic probes."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "healthcheck.sh")
+    subprocess.run(["bash", script_path], cwd=REPO_ROOT)
+
+def cmd_scan(args: Optional[list] = None):
+    """Runs host service & port discovery scanner."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "scanner.py")
+    subprocess.run([sys.executable, script_path] + (args or []), cwd=REPO_ROOT)
+
+def cmd_monitor_api(args: Optional[list] = None):
+    """Runs zero-touch existing API & domain monitor."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "monitor_api.py")
+    subprocess.run([sys.executable, script_path] + (args or []), cwd=REPO_ROOT)
+
+def cmd_telegram(args: Optional[list] = None):
+    """Runs 1-step Telegram bot setup."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "telegram_setup.py")
+    subprocess.run([sys.executable, script_path] + (args or []), cwd=REPO_ROOT)
+
+def cmd_scale_node(args: Optional[list] = None):
+    """Onboards remote VPS worker node via SSH."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "scale_node.py")
+    subprocess.run([sys.executable, script_path] + (args or []), cwd=REPO_ROOT)
+
+def cmd_test_load(args: Optional[list] = None):
+    """Runs synthetic traffic & attack benchmark."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "load_test.py")
+    subprocess.run([sys.executable, script_path] + (args or ["--duration", "20", "--rate", "10", "--simulate-attacks"]), cwd=REPO_ROOT)
+
+def cmd_test_alert(args: Optional[list] = None):
+    """Dispatches a test firing alert to Alertmanager & Telegram."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "test_alert.sh")
+    subprocess.run(["bash", script_path], cwd=REPO_ROOT)
+
+def cmd_clean_disk(args: Optional[list] = None):
+    """Runs automated 30-day TSDB and Docker log cleaner."""
+    script_path = os.path.join(REPO_ROOT, "scripts", "auto_cleaner.sh")
+    subprocess.run(["bash", script_path] + (args or []), cwd=REPO_ROOT)
+
+# ==============================================================================
+# VIEW COMMAND (COMPREHENSIVE INSPECTION)
+# ==============================================================================
+
+def cmd_view(args: Optional[list] = None):
+    """Comprehensive visual inspector for Nginx projects, Docker containers, URLs, and hardware."""
+    env = get_env_vars()
+    grafana_pass = env.get("GRAFANA_ADMIN_PASSWORD", "admin_secure_pass_change_me")
+
+    print("\n" + "=" * 85)
+    print(f" {BOLD}🔍 NEXTAURA SYSTEM & SERVICES COMPREHENSIVE VIEW{NC}")
+    print("=" * 85)
+
+    # 1. Nginx Reverse Proxy Projects Table (from SQLite registry)
+    print(f"\n{BOLD}🌐 1. REGISTERED NGINX VIRTUAL HOST PROJECTS & ROUTES:{NC}")
+    print("-" * 85)
+    try:
+        from utils.storage import StateManager
+        mgr = StateManager()
+        projects = mgr.list_projects()
+        if projects:
+            print(f"{'CODE':<10} {'PROJECT NAME':<20} {'DOMAIN / SERVER':<22} {'ROUTES':<18} {'SSL':<12}")
+            print("-" * 85)
+            for p in projects:
+                ssl_badge = f"{GREEN}✓ {p.ssl_type.upper()}{NC}" if p.ssl_enabled else f"{DIM}None (HTTP){NC}"
+                domain_str = p.domain if p.domain else f"Port :{p.listen_port}"
+                routes_summary = ", ".join([f"{r.path}->:{r.backend_port}" for r in p.routes[:2]])
+                if len(p.routes) > 2:
+                    routes_summary += f" (+{len(p.routes)-2} more)"
+                print(f"{CYAN}{p.project_code:<10}{NC} {p.project_name:<20} {domain_str:<22} {routes_summary:<18} {ssl_badge}")
+        else:
+            print(f"  {DIM}No custom Nginx projects registered yet. Use {CYAN}./aura nginx setup{DIM} to create one.{NC}")
+    except Exception as e:
+        print(f"  {YELLOW}Nginx projects registry note: {e}{NC}")
+
+    # 2. Service Access URLs and Credentials
+    print(f"\n{BOLD}🔗 2. OBSERVABILITY ENDPOINTS & CREDENTIALS:{NC}")
+    print("-" * 85)
+    print(f"• {BOLD}Grafana Dashboards:{NC}       {CYAN}http://localhost:{env['GRAFANA_PORT']}{NC} (User: admin | Pass: {grafana_pass})")
+    print(f"• {BOLD}FastAPI Application:{NC}      {CYAN}http://localhost:{env['FASTAPI_PORT']}{NC}")
+    print(f"• {BOLD}FastAPI Swagger Docs:{NC}     {CYAN}http://localhost:{env['FASTAPI_PORT']}/docs{NC}")
+    print(f"• {BOLD}Prometheus Metrics TSDB:{NC}  {CYAN}http://localhost:{env['PROMETHEUS_PORT']}{NC}")
+    print(f"• {BOLD}Alertmanager UI:{NC}          {CYAN}http://localhost:{env['ALERTMANAGER_PORT']}{NC}")
+    print(f"• {BOLD}Loki Log Server:{NC}          {CYAN}http://localhost:{env['LOKI_PORT']}{NC}")
+    print(f"• {BOLD}Tempo Trace Server:{NC}       {CYAN}http://localhost:{env['TEMPO_PORT']}{NC}")
+    print(f"• {BOLD}Nginx Ingress Proxy:{NC}      {CYAN}http://localhost:{env['NGINX_HTTP_PORT']}{NC}")
+
+    # 3. Running Docker Containers Status
+    print(f"\n{BOLD}🐳 3. ACTIVE DOCKER CONTAINERS:{NC}")
+    print("-" * 85)
+    try:
+        cmd = get_compose_cmd() + ["ps"]
+        subprocess.run(cmd, cwd=REPO_ROOT)
+    except Exception:
+        pass
+
+    # 4. Host Hardware Specs & Public IP
+    print(f"\n{BOLD}🖥️  4. HOST HARDWARE & NETWORK:{NC}")
+    print("-" * 85)
+    try:
+        from scripts.scanner import get_os_info, get_system_hardware
+        os_info = get_os_info()
+        hw_info = get_system_hardware()
+        print(f"• OS: {os_info.get('name', 'Linux')} ({os_info.get('arch', 'x86_64')}) | CPU: {hw_info.get('cpu_cores')} Cores | RAM: {hw_info.get('ram_gb')} | Disk: {hw_info.get('disk_free')}")
+        print(f"• Detected Public IP: {GREEN}{hw_info.get('public_ip')}{NC}")
+    except Exception:
+        pass
+
+    print("=" * 85 + "\n")
+
+# ==============================================================================
+# NGINX ENGINE DISPATCHER
+# ==============================================================================
+
+def cmd_nginx(args: Optional[list] = None):
+    """Dispatches commands directly to the Nginx-Setup DevOps engine."""
+    cli_main = os.path.join(NGINX_ENGINE_PATH, "cli", "main.py")
+    if not os.path.exists(cli_main):
+        print(f"{RED}Error: Nginx engine not found at {cli_main}{NC}")
+        return
+    
+    # If no subcommand provided, open Nginx interactive menu
+    cmd_args = args if args else ["menu"]
+    subprocess.run([sys.executable, cli_main] + cmd_args, cwd=REPO_ROOT)
+
+# ==============================================================================
+# COMPLETE SERVICE DELETION & DOCKER PURGE
+# ==============================================================================
+
+def cmd_purge(args: Optional[list] = None):
+    """
+    Complete service deletion & Docker teardown:
+    - Stops all containers
+    - Removes containers, networks, and persistent named volumes (docker compose down -v)
+    - Prunes dangling images, volume layers, and build cache
+    - Optionally removes Nginx virtualhost configurations
+    """
+    if args and ("-h" in args or "--help" in args):
+        print(f"\n{BOLD}Usage:{NC} ./aura purge [OPTIONS]")
+        print("\nComplete platform teardown: stops and deletes all Docker containers, volumes, networks, and caches.")
+        print(f"\n{BOLD}Options:{NC}")
+        print("  -y, --yes, -f, --force   Non-interactive mode, skip confirmation prompt.")
+        print("  -h, --help               Show this help message and exit.\n")
+        return
+
+    is_force = False
+    if args:
+        is_force = "-y" in args or "--yes" in args or "--force" in args or "-f" in args
+
+    print("\n" + "=" * 80)
+    print(f"{RED}{BOLD}⚠️  DANGER: COMPLETE PLATFORM TEARDOWN & SERVICE DELETION{NC}")
+    print("=" * 80)
+    print("This action will:")
+    print(f"  • {RED}STOP & DELETE{NC} all 11 NextAura Docker containers")
+    print(f"  • {RED}PERMANENTLY WIPE{NC} all metrics TSDB, logs, and trace volumes (`docker compose down -v`)")
+    print(f"  • {RED}REMOVE{NC} the Docker network (`monitoring_net`)")
+    print(f"  • {RED}PRUNE{NC} dangling Docker images and build caches")
+    print("=" * 80)
+
+    if not is_force:
+        confirm = input(f"\n{RED}{BOLD}Are you absolutely sure you want to delete all services and wipe data? (type 'yes' to confirm): {NC}").strip()
+        if confirm.lower() != "yes":
+            print(f"\n{GREEN}Operation cancelled. No services were modified.{NC}\n")
+            return
+
+    print(f"\n{YELLOW}[1/4] Stopping and removing all Docker containers & named volumes...{NC}")
+    cmd = get_compose_cmd() + ["down", "-v", "--remove-orphans"]
+    subprocess.run(cmd, cwd=REPO_ROOT)
+    print(f"  {GREEN}✓ Containers and persistent volumes removed.{NC}")
+
+    print(f"\n{YELLOW}[2/4] Pruning dangling Docker volumes and build caches...{NC}")
+    subprocess.run(["docker", "volume", "prune", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["docker", "builder", "prune", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"  {GREEN}✓ Docker artifacts cleaned.{NC}")
+
+    print(f"\n{YELLOW}[3/4] Cleaning ephemeral log buffers in /tmp/vps_monitoring_logs...{NC}")
+    subprocess.run(["rm", "-rf", "/tmp/vps_monitoring_logs"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"  {GREEN}✓ Ephemeral log buffers cleaned.{NC}")
+
+    # Optional Nginx site decommissioning
+    if not is_force:
+        clean_nginx = input(f"\nDo you also want to remove registered Nginx projects & virtual hosts? (y/N): ").strip().lower()
+        if clean_nginx in ("y", "yes"):
+            try:
+                from utils.storage import StateManager
+                from core.nginx_manager import NginxManager
+                sm = StateManager()
+                nm = NginxManager()
+                projs = sm.list_projects()
+                for p in projs:
+                    print(f"  • Decommissioning Nginx project: {p.project_name} ({p.project_code})...")
+                    nm.remove_config(p.project_name)
+                    sm.delete_project(p.project_name)
+                print(f"  {GREEN}✓ All registered Nginx projects decommissioned.{NC}")
+            except Exception as e:
+                print(f"  {YELLOW}Notice: {e}{NC}")
+
+    print(f"\n{GREEN}================================================================")
+    print(f" 🎉 COMPLETE TEARDOWN FINISHED: ALL SERVICES SAFELY REMOVED")
+    print(f"================================================================{NC}")
+    print(f"• To redeploy the platform anytime, simply run: {CYAN}./aura up{NC} or {CYAN}./aura menu{NC}\n")
+
+# ==============================================================================
+# MAIN DISPATCHER
+# ==============================================================================
+
+COMMAND_MAP = {
+    "menu": cmd_menu,
+    "up": cmd_up,
+    "start": cmd_up,
+    "down": cmd_down,
+    "stop": cmd_down,
+    "restart": cmd_restart,
+    "status": cmd_status,
+    "ps": cmd_status,
+    "view": cmd_view,
+    "views": cmd_view,
+    "logs": cmd_logs,
+    "health": cmd_health,
+    "healthcheck": cmd_health,
+    "scan": cmd_scan,
+    "monitor-api": cmd_monitor_api,
+    "telegram": cmd_telegram,
+    "scale-node": cmd_scale_node,
+    "test-load": cmd_test_load,
+    "test-alert": cmd_test_alert,
+    "clean-disk": cmd_clean_disk,
+    "nginx": cmd_nginx,
+    "purge": cmd_purge,
+    "destroy": cmd_purge,
+    "remove-all": cmd_purge,
+    "clean-all": cmd_purge,
+}
+
+def print_help():
+    print(BANNER)
+    print("=" * 80)
+    print(f" {BOLD}NEXTAURA UNIFIED CLI (`aura`) - COMMAND REFERENCE{NC}")
+    print("=" * 80)
+    print(f"\n{BOLD}🚀 CORE MANAGEMENT:{NC}")
+    print(f"  {CYAN}./aura{NC}                 Launch Interactive Master Control Center (Default)")
+    print(f"  {CYAN}./aura up{NC}              Build & start all 11 Docker observability containers")
+    print(f"  {CYAN}./aura down{NC}            Gracefully stop all platform containers")
+    print(f"  {CYAN}./aura restart{NC}         Restart all services")
+    print(f"  {CYAN}./aura status{NC}          Display running container statuses and health")
+    print(f"  {CYAN}./aura view{NC}            Comprehensive inspection (Nginx projects, containers, URLs, specs)")
+    print(f"  {CYAN}./aura logs [svc]{NC}      Stream live logs from containers")
+
+    print(f"\n{BOLD}🌐 NGINX & REVERSE PROXY AUTOMATION:{NC}")
+    print(f"  {CYAN}./aura nginx setup{NC}      Interactive wizard to configure Nginx virtualhost & SSL")
+    print(f"  {CYAN}./aura nginx add-service{NC}Append a backend route/service to an existing project")
+    print(f"  {CYAN}./aura nginx enable-ssl{NC} Enable / upgrade Let's Encrypt or IP Self-Signed SSL")
+    print(f"  {CYAN}./aura nginx list{NC}       List registered Nginx virtual hosts & Project Codes (SE-001)")
+    print(f"  {CYAN}./aura nginx preview{NC}    Preview Nginx configuration syntax with dry-run")
+    print(f"  {CYAN}./aura nginx test{NC}       Validate Nginx syntax (`nginx -t`)")
+    print(f"  {CYAN}./aura nginx remove{NC}     Decommission an Nginx virtual host")
+
+    print(f"\n{BOLD}🛡️ OBSERVABILITY, SCANNING & SECURITY:{NC}")
+    print(f"  {CYAN}./aura scan{NC}             Scan host ports, pre-existing Nginx/Apache & DBs")
+    print(f"  {CYAN}./aura monitor-api{NC}     Zero-touch read-only monitor for existing APIs")
+    print(f"  {CYAN}./aura telegram{NC}        1-step Telegram alert bot token & Chat ID setup")
+    print(f"  {CYAN}./aura scale-node{NC}      Onboard remote Linux VPS worker node via SSH")
+    print(f"  {CYAN}./aura health{NC}          Run diagnostic health probes across all 10 endpoints")
+    print(f"  {CYAN}./aura test-load{NC}       Generate synthetic traffic, latency spikes & attacks")
+    print(f"  {CYAN}./aura test-alert{NC}      Dispatch a test alert to Alertmanager & Telegram")
+    print(f"  {CYAN}./aura clean-disk{NC}      Prune 30-day TSDB blocks, log archives & Docker layers")
+
+    print(f"\n{BOLD}🗑️  SERVICE DELETION & TEARDOWN:{NC}")
+    print(f"  {RED}./aura purge{NC}            Stop & delete all containers, wipe volumes, clean networks")
+    print(f"  {RED}./aura destroy -y{NC}       Non-interactive complete destruction of all services")
+
+    print("=" * 80 + "\n")
+
+def main():
+    if len(sys.argv) == 1:
+        # Default with no arguments: open Master Control Center
+        cmd_menu()
+        return
+
+    subcmd = sys.argv[1].lower().lstrip("-")
+    if subcmd in ("h", "help"):
+        print_help()
+        return
+
+    handler = COMMAND_MAP.get(subcmd)
+    if handler:
+        handler(sys.argv[2:])
+    else:
+        print(f"{RED}Unknown command: '{sys.argv[1]}'{NC}")
+        print(f"Run {CYAN}./aura help{NC} for all available commands.")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

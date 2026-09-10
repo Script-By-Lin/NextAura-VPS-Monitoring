@@ -59,29 +59,32 @@ flowchart TD
 
 ## 📋 Comprehensive Usage Tables
 
-### 1. 🛠️ CLI Management Commands (`Makefile`)
+### 1. 🛠️ Unified CLI Management Commands (`./aura`)
 
-| Command | Underlying Script | Description & Purpose |
+| Command | Underlying Handler | Description & Purpose |
 | :--- | :--- | :--- |
-| **`make install`** | `bash install.sh` | **1-Click Universal Installer**: Auto-detects OS, installs Docker/Compose/Tools, scans ports, and launches. |
-| **`make prereqs`** | `bash scripts/install_prereqs.sh` | **OS & Dependency Engine**: Detects Linux Distro (Ubuntu, Debian, RHEL, Arch, Alpine, SUSE) & installs prerequisites. |
-| **`make menu`** | `python3 scripts/control_center.py` | **Master Control Center**: All-in-one interactive menu to manage, scan, scale, test, and monitor. |
-| **`make wizard`** | `python3 scripts/wizard.py` | **Interactive Setup Wizard**: Guided questionnaire to scan ports, configure Telegram, VPS specs, and deploy. |
-| **`make scan`** | `python3 scripts/scanner.py` | **Host Discovery Scanner**: Detects pre-existing Nginx, running sites, open ports, and databases. |
-| **`make monitor-api`** | `python3 scripts/monitor_api.py` | **Zero-Touch API Monitor**: Monitors existing API domains & metrics without touching your configs. |
-| **`make add-site`** | `python3 scripts/nginx_site_generator.py` | **Custom Nginx Site**: Auto-generates Nginx reverse proxy configs for your custom frontend/backend apps. |
-| **`make telegram`** | `python3 scripts/telegram_setup.py` | **1-Step Telegram Setup**: Auto-detects Chat ID from Bot Token and configures Alertmanager. |
-| **`make clean-disk`** | `bash scripts/auto_cleaner.sh` | **Automated Disk Cleaner**: Prunes 30-day expired TSDB blocks, log archives, Docker dangling layers, and journals. |
-| **`make enable-autoclean`** | `bash scripts/auto_cleaner.sh --install-cron` | **Enable Daily Cron**: Installs automated daily 3:00 AM disk cleanup and maintenance cron job. |
-| **`make up`** | `docker-compose up -d --build` | **Start Platform**: Builds and starts all 11 observability and security containers. |
-| **`make down`** | `docker-compose down` | **Stop Platform**: Gracefully shuts down all containers. |
-| **`make restart`** | `docker-compose restart` | **Restart Platform**: Restarts all services without rebuilding. |
-| **`make status`** | `docker-compose ps` | **Status Check**: Displays status and healthcheck results of all containers. |
-| **`make logs`** | `docker-compose logs -f --tail=100` | **Live Logs**: Streams real-time logs from all services. |
-| **`make healthcheck`**| `bash scripts/healthcheck.sh` | **Diagnostic Health Probe**: Validates all 10 HTTP endpoints, scrape targets, and data stores. |
-| **`make test-load`** | `python3 scripts/load_test.py` | **Traffic Benchmark**: Generates synthetic workloads, latency spikes, and security attack simulations. |
-| **`make test-alert`**| `bash scripts/test_alert.sh` | **Alert Test**: Dispatches a test firing alert to Alertmanager to verify Telegram delivery. |
-| **`make clean`** | `docker-compose down -v` | **Full Reset**: Stops stack and wipes all persistent TSDB, log, and trace volumes. |
+| **`./aura`** or **`./aura menu`** | `scripts/control_center.py` | **Master Control Center**: All-in-one interactive menu to manage, view, scan, scale, test, and purge. |
+| **`./aura view`** | Built-in Multi-View Inspector | **Comprehensive Inspector**: Live view of registered Nginx projects, Docker containers, URLs, and hardware. |
+| **`./aura up`** | `docker compose up -d --build` | **Start Platform**: Builds and starts all 11 observability and security microservices. |
+| **`./aura down`** | `docker compose down` | **Stop Platform**: Gracefully shuts down all platform containers. |
+| **`./aura restart`** | `docker compose restart` | **Restart Platform**: Restarts all containers without rebuilding. |
+| **`./aura status`** | `docker compose ps` | **Status Check**: Displays status, healthcheck results, and listening ports. |
+| **`./aura logs [svc]`** | `docker compose logs -f` | **Live Logs**: Streams real-time logs from all or specific services. |
+| **`./aura health`** | `scripts/healthcheck.sh` | **Diagnostic Health Probe**: Validates all 10 HTTP endpoints, scrape targets, and data stores. |
+| **`./aura nginx [cmd]`** | `nginx_engine/` | **Nginx DevOps Engine**: Full virtual host setup, Let's Encrypt SSL, IP SAN certs, and route additions. |
+| **`./aura nginx list`** | `nginx_engine (SQLite)` | **List Nginx Projects**: Formatted table of registered projects with Project Codes (`SE-001`). |
+| **`./aura scan`** | `scripts/scanner.py` | **Host Discovery Scanner**: Detects pre-existing Nginx, running sites, open ports, and databases. |
+| **`./aura monitor-api`** | `scripts/monitor_api.py` | **Zero-Touch API Monitor**: Monitors existing API domains & metrics without touching your configs. |
+| **`./aura telegram`** | `scripts/telegram_setup.py` | **1-Step Telegram Setup**: Auto-detects Chat ID from Bot Token and configures Alertmanager. |
+| **`./aura scale-node`** | `scripts/scale_node.py` | **Remote VPS Scaling**: Onboard a remote Linux VPS worker node via SSH. |
+| **`./aura test-load`** | `scripts/load_test.py` | **Traffic Benchmark**: Generates synthetic workloads, latency spikes, and security attack simulations. |
+| **`./aura test-alert`**| `scripts/test_alert.sh` | **Alert Test**: Dispatches a test firing alert to Alertmanager to verify Telegram delivery. |
+| **`./aura clean-disk`** | `scripts/auto_cleaner.sh` | **Automated Disk Cleaner**: Prunes 30-day expired TSDB blocks, log archives, Docker dangling layers, and journals. |
+| **`./aura purge`** | Docker & Service Teardown | **Complete Deletion**: Stops and deletes all containers, wipes persistent volumes (`-v`), cleans caches. |
+| **`./aura destroy -y`** | Force Teardown | **Non-Interactive Full Teardown**: Immediately purges all services and volumes. |
+
+> [!NOTE]
+> All commands can also be run with `make <target>` (e.g. `make view`, `make up`, `make down`, `make purge`) for seamless backward compatibility.
 
 ---
 
@@ -281,42 +284,55 @@ bash install.sh
 
 ### 2. Master Interactive Menu
 ```bash
-make
+./aura
 # or
-make menu
+./aura menu
 ```
 
-### 3. Configure 1-Step Telegram Alerts
+### 3. Comprehensive Multi-View Inspection
 ```bash
-make telegram
+./aura view
+# Displays registered Nginx projects & routes, container health, URLs, and hardware.
+```
+
+### 4. Nginx Reverse Proxy & SSL Automation
+```bash
+# Setup new reverse proxy with Let's Encrypt or IP Self-Signed SSL:
+./aura nginx setup
+
+# Append route to an existing project:
+./aura nginx add-service --project SE-001 --path /api2/ --port 8002
+
+# List all virtual hosts and Project Codes:
+./aura nginx list
+```
+
+### 5. Configure 1-Step Telegram Alerts
+```bash
+./aura telegram
 # Enter your Bot Token from @BotFather -> press /start on Telegram -> Done!
 ```
 
-### 4. Monitor Existing API / Domain (Zero-Touch Read-Only)
+### 6. Monitor Existing API / Domain (Zero-Touch Read-Only)
 ```bash
-make monitor-api
+./aura monitor-api
 # Enter your API URL (e.g. https://api.yourdomain.com) -> monitors uptime, latency, and SSL without touching your configs!
 ```
 
-### 5. Add Custom Nginx Service / Site
-```bash
-make add-site
-# Follow prompts to auto-generate reverse proxy configs for Node, React, Python, or Go apps.
-```
-
-### 6. Run System Diagnostics & Load Benchmark
+### 7. Run Diagnostics & Complete Teardown
 ```bash
 # Verify all endpoints and targets:
-make healthcheck
+./aura health
 
-# Generate realistic traffic, latency spikes, and attack simulations:
-make test-load
+# Complete platform teardown / delete all services:
+./aura purge
 ```
 
 ---
 
 ## 📚 Architectural & Engineering Documentation
 
+- 📖 [Complete Usage Manual & Command Reference Guide](file:///home/bit/Projects/VPS_Monitoring/usage_manual_guide.md)
 - 🏛️ [System Architecture & Data Flow](file:///home/bit/Projects/VPS_Monitoring/docs/ARCHITECTURE.md)
 - 📈 [Scaling Roadmap (1 to 100+ VPS Nodes)](file:///home/bit/Projects/VPS_Monitoring/docs/SCALING_ROADMAP.md)
 - 🛡️ [Security Hardening & UFW Firewall Guide](file:///home/bit/Projects/VPS_Monitoring/docs/SECURITY_GUIDE.md)
